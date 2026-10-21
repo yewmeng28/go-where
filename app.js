@@ -61,10 +61,10 @@ try { navigator.storage?.persist?.(); } catch (e) { /* ignore */ }
 const ui = { tab: 'map', map: null, layer: null, me: null, view: null, pick: null, draft: null, sort: 'recent', filter: [], minOverall: 0, minQ: {}, maxPrice: 0, results: [], busy: false };
 
 let toastT;
-function toast(msg) {
+function toast(msg, ms = 2600) {
   const t = $('#toast');
   t.textContent = msg; t.hidden = false;
-  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2600);
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, ms);
 }
 
 const cat = id => S.cats.find(c => c.id === id);
@@ -329,11 +329,17 @@ async function search() {
 }
 
 function locate(cb) {
-  if (!navigator.geolocation) return toast('Location is not available');
-  navigator.geolocation.getCurrentPosition(pos => {
-    ui.me = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    cb && cb();
-  }, () => toast('Location unavailable — allow it in Settings › Privacy › Location'), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+  if (!window.isSecureContext) return toast('Location only works on https:// pages. Open the GitHub Pages address, not an http:// one.', 6000);
+  if (!navigator.geolocation) return toast('This browser has no location support', 5000);
+  const ok = pos => { ui.me = { lat: pos.coords.latitude, lng: pos.coords.longitude }; cb && cb(); };
+  const fail = e => toast(e.code === 1
+    ? 'Location is blocked for GoWhere. Settings › Privacy & Security › Location Services: turn it on, and set GoWhere (or Safari Websites) to While Using.'
+    : e.code === 3 ? 'Could not get a position in time. Try again with Wi-Fi on, or outdoors.'
+      : 'Position unavailable. Check Location Services is on for this device.', 7000);
+  // GPS first; if that times out (indoors), retry with the coarser Wi-Fi/cell position
+  navigator.geolocation.getCurrentPosition(ok, e => (e.code === 3
+    ? navigator.geolocation.getCurrentPosition(ok, fail, { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 })
+    : fail(e)), { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
 }
 
 function savePin() {

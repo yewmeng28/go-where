@@ -22,6 +22,14 @@ Plain HTML/CSS/JS, no build step, no backend, no accounts. Data lives in your br
 
 Push to GitHub, then Settings → Pages → *Deploy from a branch* → `main` / `/ (root)`. Open the URL in **Safari** on your iPhone and use Share → **Add to Home Screen**.
 
+## Location troubleshooting (iPhone)
+
+1. **Use the https address.** Geolocation is blocked on plain `http://` pages (a `http://192.168.x.x:8000` dev server on your phone will never work; `http://localhost` only works on the machine running it). The GitHub Pages URL is https, so use that.
+2. **Settings › Privacy & Security › Location Services** must be **on**. Then set **Safari Websites** to *While Using the App* (this covers the Safari tab) and, once you've tapped ◎ in the Home Screen app, find **GoWhere** in the same list and set it to *While Using the App* too. Home Screen apps get their own entry.
+3. If it was denied once and never asks again: delete the Home Screen icon and add it again (this resets that app's permission), or use **Settings › General › Transfer or Reset iPhone › Reset › Reset Location & Privacy** to make every app ask again.
+4. Try it in a Safari tab first: the **aA** menu › **Website Settings › Location** shows *Ask / Allow / Deny* for the site.
+5. The message shown in the app says which case it is: blocked (permission), timed out (retry on Wi-Fi or outdoors), or unavailable.
+
 ## Notes
 
 - **The map is online-only.** The app stores only your places and its own files. Leaflet is loaded from unpkg when you open the Map tab and the tiles come from OpenStreetMap (fetched with `no-store`), so nothing from the map is cached. Offline, the Map tab says so and the List, Manage and add-by-GPS still work. Search (Photon) and Pick on map also need a connection.
