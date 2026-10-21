@@ -1,4 +1,4 @@
-:root{--bg:#0f1720;--card:#17212d;--card2:#1e2b3a;--line:#2a3a4d;--text:#eaf0f6;--muted:#8b9bb0;--accent:#2ec4b6;--danger:#ff6b6b;--tabs:58px;--head:"Avenir Next","Trebuchet MS",system-ui,sans-serif}
+:root{--bg:#0f1720;--card:#17212d;--card2:#1e2b3a;--line:#2a3a4d;--text:#eaf0f6;--muted:#8b9bb0;--accent:#2ec4b6;--danger:#ff6b6b;--tabs:58px;--safe-b:calc(env(safe-area-inset-bottom) * .4);--head:"Avenir Next","Trebuchet MS",system-ui,sans-serif}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;overscroll-behavior:none}
 body{padding-top:env(safe-area-inset-top)}
@@ -9,10 +9,10 @@ body{padding-top:env(safe-area-inset-top)}
 .tag{margin-left:auto;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
 
 /* the view fills exactly the space between the header and the tab bar (same --tabs height as Heavy Metal) */
-#view{position:fixed;left:0;right:0;top:calc(52px + env(safe-area-inset-top));bottom:calc(var(--tabs) + env(safe-area-inset-bottom));overflow-y:auto;-webkit-overflow-scrolling:touch}
+#view{position:fixed;left:0;right:0;top:calc(52px + env(safe-area-inset-top));bottom:calc(var(--tabs) + var(--safe-b));overflow-y:auto;-webkit-overflow-scrolling:touch}
 #view.pad{padding:16px 16px 24px}
 #view.pad>*{max-width:640px;margin-left:auto;margin-right:auto}
-#tabs{position:fixed;left:0;right:0;bottom:0;height:calc(var(--tabs) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);display:flex;background:#0b121a;border-top:1px solid var(--line);z-index:1000}
+#tabs{position:fixed;left:0;right:0;bottom:0;height:calc(var(--tabs) + var(--safe-b));padding-bottom:var(--safe-b);display:flex;background:#0b121a;border-top:1px solid var(--line);z-index:1000}
 #tabs button{flex:1;border:0;background:none;color:var(--muted);font:inherit;font-size:10px;letter-spacing:.14em;text-transform:uppercase;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
 #tabs button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #tabs button.on{color:var(--accent)}
@@ -60,7 +60,7 @@ label.f{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercas
 /* bottom sheet */
 #sheet{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
 #sheet[hidden]{display:none}
-#sheet .panel{width:100%;max-width:640px;max-height:88dvh;overflow-y:auto;background:var(--card);border-radius:18px 18px 0 0;border:1px solid var(--line);padding:16px 16px calc(12px + env(safe-area-inset-bottom))}
+#sheet .panel{width:100%;max-width:640px;max-height:88dvh;overflow-y:auto;background:var(--card);border-radius:18px 18px 0 0;border:1px solid var(--line);padding:16px 16px calc(12px + var(--safe-b))}
 #sheet h2{display:flex;align-items:center;gap:8px}
 #sheet h2 .x{margin-left:auto}
 .x{font:inherit;font-size:22px;line-height:1;color:var(--muted);background:none;border:0;padding:4px 8px}
@@ -92,7 +92,7 @@ label.f{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercas
 .empty{text-align:center;color:var(--muted);padding:40px 16px}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
 
-#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabs) + env(safe-area-inset-bottom) + 16px);background:#000d;color:#fff;border-radius:10px;padding:10px 14px;z-index:3000;font-size:14px;max-width:90%}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabs) + var(--safe-b) + 16px);background:#000d;color:#fff;border-radius:10px;padding:10px 14px;z-index:3000;font-size:14px;max-width:90%}
 #toast[hidden]{display:none}
 
 /* qualifiers */

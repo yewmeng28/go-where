@@ -1,5 +1,5 @@
 'use strict';
-const CACHE = 'gw-v10';
+const CACHE = 'gw-v11';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -17,11 +17,9 @@ self.addEventListener('fetch', e => {
   if (r.method !== 'GET') return;
   // only the app's own files are cached; the map library, tiles and search always go to the network
   if (u.origin !== location.origin) return;
-  e.respondWith(caches.match(r).then(hit => {
-    const net = fetch(r).then(res => {
-      if (res.ok) caches.open(CACHE).then(c => c.put(r, res.clone()));
-      return res;
-    }).catch(() => hit);
-    return hit || net;
-  }));
+  // network first, so a new version shows up on the next launch; the cache is the offline fallback
+  e.respondWith(fetch(r).then(res => {
+    if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(r, copy)); }
+    return res;
+  }).catch(() => caches.match(r)));
 });
