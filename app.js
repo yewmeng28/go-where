@@ -113,16 +113,19 @@ const markerSvg = (color, emoji) => `<svg viewBox="0 0 24 24" style="color:${col
 
 /* ---------- rendering ---------- */
 function render(keep) {
-  const y = keep ? $('#view').scrollTop : 0;
+  const y = keep ? scroller().scrollTop : 0;
   if (ui.map) { ui.view = { c: ui.map.getCenter(), z: ui.map.getZoom() }; ui.map.remove(); ui.map = null; }
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === ui.tab));
   const v = $('#view');
-  v.className = ui.tab === 'map' ? '' : 'pad';
+  v.className = ui.tab === 'map' ? 'map' : '';
   if (ui.tab === 'map') renderMap(v);
   else if (ui.tab === 'list') renderList(v);
   else renderManage(v);
-  v.scrollTop = y;
+  scroller().scrollTop = y;
 }
+
+// the map tab keeps its own fixed layer; the other tabs scroll the page, like Heavy Metal
+const scroller = () => ui.tab === 'map' ? $('#view') : document.scrollingElement || document.documentElement;
 
 function chipsHtml() {
   const chip = (id, on, label) => `<button class="chip ${on ? 'on' : ''}" data-act="chip" data-id="${esc(id)}">${label}</button>`;
@@ -204,7 +207,7 @@ function drawMarkers() {
 }
 
 function renderList(v, keepScroll) {
-  const y = v.scrollTop;
+  const y = scroller().scrollTop;
   let ps = visible().slice();
   if (ui.sort === 'rating') ps.sort((a, b) => pinRating(b) - pinRating(a) || b.created - a.created);
   else if (ui.sort === 'near' && ui.me) ps.sort((a, b) => dist(ui.me, a) - dist(ui.me, b));
@@ -227,7 +230,7 @@ function renderList(v, keepScroll) {
           <div class="sm muted">${c ? esc(c.emoji + ' ' + c.name) : 'Uncategorised'}${p.pmin != null ? ' · ' + esc(priceText(p)) : ''}${ui.me ? ' · ' + fmtDist(dist(ui.me, p)) : ''}</div>
           ${stars(pinRating(p), true, '', '', true)}${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}</div></div>`;
     }).join('') : `<div class="empty">${S.pins.length ? 'No places in this category.' : 'No places yet.<br>Tap + on the map to save your first one.'}</div>`);
-  if (keepScroll) v.scrollTop = y;
+  if (keepScroll) scroller().scrollTop = y;
 }
 
 function renderManage(v) {

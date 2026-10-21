@@ -1,17 +1,17 @@
-:root{--bg:#0f1720;--card:#17212d;--card2:#1e2b3a;--line:#2a3a4d;--text:#eaf0f6;--muted:#8b9bb0;--accent:#2ec4b6;--danger:#ff6b6b;--tabs:58px;--safe-b:calc(env(safe-area-inset-bottom) * .4);--head:"Avenir Next","Trebuchet MS",system-ui,sans-serif}
+:root{--bg:#0f1720;--card:#17212d;--card2:#1e2b3a;--line:#2a3a4d;--text:#eaf0f6;--muted:#8b9bb0;--accent:#2ec4b6;--danger:#ff6b6b;--tabs:58px;--safe-b:env(safe-area-inset-bottom);--head:"Avenir Next","Trebuchet MS",system-ui,sans-serif}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;overscroll-behavior:none}
-body{padding-top:env(safe-area-inset-top)}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif}
+body{padding:env(safe-area-inset-top) 0 0;min-height:100vh}
 
 #top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);height:52px}
 #top h1{margin:0;font:700 24px/1 var(--head);letter-spacing:.02em;display:flex;align-items:center}
 .logo{width:26px;height:38px;flex:none;color:var(--accent);margin-left:6px;overflow:visible}
 .tag{margin-left:auto;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
 
-/* the view fills exactly the space between the header and the tab bar (same --tabs height as Heavy Metal) */
-#view{position:fixed;left:0;right:0;top:calc(52px + env(safe-area-inset-top));bottom:calc(var(--tabs) + var(--safe-b));overflow-y:auto;-webkit-overflow-scrolling:touch}
-#view.pad{padding:16px 16px 24px}
-#view.pad>*{max-width:640px;margin-left:auto;margin-right:auto}
+/* same structure as Heavy Metal: the page itself scrolls, with room left under the fixed tab bar */
+#view{padding:16px 16px calc(var(--tabs) + var(--safe-b) + 24px);max-width:640px;margin:0 auto}
+/* the map tab is the exception: a fixed layer between the header and the tab bar */
+#view.map{position:fixed;left:0;right:0;top:calc(52px + env(safe-area-inset-top));bottom:calc(var(--tabs) + var(--safe-b));padding:0;max-width:none;margin:0;overflow:hidden}
 #tabs{position:fixed;left:0;right:0;bottom:0;height:calc(var(--tabs) + var(--safe-b));padding-bottom:var(--safe-b);display:flex;background:#0b121a;border-top:1px solid var(--line);z-index:1000}
 #tabs button{flex:1;border:0;background:none;color:var(--muted);font:inherit;font-size:10px;letter-spacing:.14em;text-transform:uppercase;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
 #tabs button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
