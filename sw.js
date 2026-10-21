@@ -1,5 +1,5 @@
 'use strict';
-const CACHE = 'gw-v8';
+const CACHE = 'gw-v10';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

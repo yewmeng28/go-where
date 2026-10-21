@@ -14,7 +14,13 @@ const fmtNum = n => Number.isInteger(n) ? String(n) : n.toFixed(2);
 const priceText = p => p.pmin == null ? '' : S.currency + fmtNum(p.pmin) + (p.pmax != null && p.pmax !== p.pmin ? '–' + fmtNum(p.pmax) : '');
 const priceMid = p => p.pmin == null ? null : (p.pmin + (p.pmax ?? p.pmin)) / 2;
 const num = v => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : null; };
-const rc = r => RC[r | 0] || RC[0];
+// colour for any rating 0..5: grey when unrated, otherwise blended between the red-to-green steps
+const rc = r => {
+  if (!(r > 0)) return RC[0];
+  const x = Math.min(Math.max(r, 1), 5), i = Math.min(Math.floor(x), 4), f = x - i;
+  const [a, b] = [RC[i], RC[i + 1]].map(h => [1, 3, 5].map(k => parseInt(h.slice(k, k + 2), 16)));
+  return '#' + a.map((v, k) => Math.round(v + (b[k] - v) * f).toString(16).padStart(2, '0')).join('');
+};
 
 // Each category carries its own 5-star qualifiers; on every one, more stars is better (so "Value" = cheaper).
 const DEFAULT_QUALS = {
@@ -68,6 +74,13 @@ function addQual(c, name) {
 }
 const pinOf = id => S.pins.find(p => p.id === id);
 
+// overall rating = average of the rated qualifiers, to 0.1; with none rated it falls back to a manual star rating
+function calcRating(catId, qr = {}, manual = 0) {
+  const v = (cat(catId)?.quals || []).map(q => qr[q.id] || 0).filter(Boolean);
+  return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10 : manual || 0;
+}
+const pinRating = p => calcRating(p.cat, p.qr, p.rating);
+
 function dist(a, b) {
   const R = 6371, rad = x => x * Math.PI / 180;
   const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
@@ -86,14 +99,14 @@ const activeFilters = () => (ui.minOverall ? 1 : 0) + (ui.maxPrice ? 1 : 0) + Ob
 
 function visible() {
   return S.pins.filter(p => (!ui.filter.length || ui.filter.includes(cat(p.cat) ? p.cat : ''))
-    && p.rating >= ui.minOverall
+    && pinRating(p) >= ui.minOverall
     && (!ui.maxPrice || (p.pmin != null && p.pmin <= ui.maxPrice))
     && Object.entries(ui.minQ).every(([k, min]) => !min || qualValue(p, k) >= min));
 }
 
 // 5 stars: read-only, or buttons that fire `act` (extra = additional data attributes)
-const stars = (r, ro, act = 'star', extra = '') => ro
-  ? `<div class="stars ro" style="--c:${rc(r)}">${[1, 2, 3, 4, 5].map(i => `<span class="${i <= r ? 'on' : ''}">★</span>`).join('')}</div>`
+const stars = (r, ro, act = 'star', extra = '', num = false) => ro
+  ? `<div class="stars ro" style="--c:${rc(r)}">${[1, 2, 3, 4, 5].map(i => `<span style="--p:${Math.round(Math.min(Math.max(r - (i - 1), 0), 1) * 100)}%">★</span>`).join('')}${num && r ? `<b>${r.toFixed(1)}</b>` : ''}</div>`
   : `<div class="stars" style="--c:${rc(r)}">${[1, 2, 3, 4, 5].map(i => `<button data-act="${act}" ${extra} data-v="${i}" class="${i <= r ? 'on' : ''}" aria-label="${i} stars">★</button>`).join('')}</div>`;
 
 const markerSvg = (color, emoji) => `<svg viewBox="0 0 24 24" style="color:${color}"><use href="#pin"/></svg><span>${esc(emoji || '')}</span>`;
@@ -184,7 +197,7 @@ function drawMarkers() {
   ui.layer.clearLayers();
   for (const p of visible()) {
     const c = cat(p.cat);
-    L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'gw-marker', html: markerSvg(rc(p.rating), c?.emoji), iconSize: [36, 36], iconAnchor: [18, 34] }) })
+    L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'gw-marker', html: markerSvg(rc(pinRating(p)), c?.emoji), iconSize: [36, 36], iconAnchor: [18, 34] }) })
       .on('click', () => openDetail(p.id)).addTo(ui.layer);
   }
   if (ui.me) L.marker([ui.me.lat, ui.me.lng], { icon: L.divIcon({ className: 'gw-marker', html: '<div class="gw-me"></div>', iconSize: [16, 16] }), interactive: false }).addTo(ui.layer);
@@ -193,7 +206,7 @@ function drawMarkers() {
 function renderList(v, keepScroll) {
   const y = v.scrollTop;
   let ps = visible().slice();
-  if (ui.sort === 'rating') ps.sort((a, b) => b.rating - a.rating || b.created - a.created);
+  if (ui.sort === 'rating') ps.sort((a, b) => pinRating(b) - pinRating(a) || b.created - a.created);
   else if (ui.sort === 'near' && ui.me) ps.sort((a, b) => dist(ui.me, a) - dist(ui.me, b));
   else if (ui.sort === 'pasc' || ui.sort === 'pdesc') {        // sorted by the middle of the range; unpriced places go last
     const dir = ui.sort === 'pasc' ? 1 : -1;
@@ -209,10 +222,10 @@ function renderList(v, keepScroll) {
     + (ps.length ? ps.map(p => {
       const c = cat(p.cat);
       return `<div class="card pin" data-act="detail" data-id="${p.id}">
-        <svg class="ic" viewBox="0 0 24 24" style="color:${rc(p.rating)}"><use href="#pin"/></svg>
+        <svg class="ic" viewBox="0 0 24 24" style="color:${rc(pinRating(p))}"><use href="#pin"/></svg>
         <div class="grow"><b>${esc(p.name)}</b>
           <div class="sm muted">${c ? esc(c.emoji + ' ' + c.name) : 'Uncategorised'}${p.pmin != null ? ' · ' + esc(priceText(p)) : ''}${ui.me ? ' · ' + fmtDist(dist(ui.me, p)) : ''}</div>
-          ${stars(p.rating, true)}${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}</div></div>`;
+          ${stars(pinRating(p), true, '', '', true)}${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}</div></div>`;
     }).join('') : `<div class="empty">${S.pins.length ? 'No places in this category.' : 'No places yet.<br>Tap + on the map to save your first one.'}</div>`);
   if (keepScroll) v.scrollTop = y;
 }
@@ -241,8 +254,9 @@ function renderManage(v) {
 
 /* ---------- sheet: detail & form ---------- */
 function showSheet(html) {
-  const s = $('#sheet');
+  const s = $('#sheet'), y = s.hidden ? 0 : s.querySelector('.panel')?.scrollTop || 0;
   s.innerHTML = `<div class="panel">${html}</div>`; s.hidden = false;
+  if (y) s.querySelector('.panel').scrollTop = y;
 }
 function closeSheet() { $('#sheet').hidden = true; $('#sheet').innerHTML = ''; ui.results = []; }
 
@@ -252,8 +266,8 @@ function openDetail(id) {
   const p = pinOf(id); if (!p) return;
   const c = cat(p.cat);
   showSheet(`<h2>${esc(p.name)}<button class="x" data-act="close">×</button></h2>
-    <div class="sm muted">${c ? esc(c.emoji + ' ' + c.name) : 'Uncategorised'} · ${RL[p.rating]}${p.pmin != null ? ' · ' + esc(priceText(p)) : ''}${ui.me ? ' · ' + fmtDist(dist(ui.me, p)) + ' away' : ''}</div>
-    <div style="margin:8px 0">${stars(p.rating, true)}</div>
+    <div class="sm muted">${c ? esc(c.emoji + ' ' + c.name) : 'Uncategorised'}${p.pmin != null ? ' · ' + esc(priceText(p)) : ''}${ui.me ? ' · ' + fmtDist(dist(ui.me, p)) + ' away' : ''}</div>
+    <div style="margin:8px 0">${stars(pinRating(p), true, '', '', true)}</div>
     ${(c?.quals || []).filter(q => p.qr?.[q.id]).map(q => `<div class="qrow"><span class="grow">${esc(q.name)}</span>${stars(p.qr[q.id], true)}</div>`).join('')}
     ${p.note ? `<div style="white-space:pre-wrap;margin:10px 0">${esc(p.note)}</div>` : ''}
     <div class="row"><a class="btn primary grow" style="text-align:center;text-decoration:none" href="${mapsUrl(p)}">Directions</a>
@@ -263,6 +277,13 @@ function openDetail(id) {
 function newDraft(lat, lng) {
   const first = ui.filter.find(id => cat(id)) || S.cats[0]?.id || '';
   return { id: null, name: '', cat: first, rating: 0, pmin: '', pmax: '', qr: {}, note: '', lat: lat ?? null, lng: lng ?? null, addr: '', q: '' };
+}
+
+function overallBlock(d) {
+  const r = calcRating(d.cat, d.qr, d.rating);
+  if (!cat(d.cat)?.quals.length) return `<label class="f">Rating · ${RL[d.rating]}</label>${stars(d.rating)}`;
+  return `<label class="f">Overall rating · average of the details</label>`
+    + (r ? `<div class="overall">${stars(r, true, '', '', true)}</div>` : '<div class="sm muted">Rate a detail above to get an overall score.</div>');
 }
 
 function openForm(d) {
@@ -277,12 +298,12 @@ function openForm(d) {
     <label class="f">Name</label><input data-f="name" value="${esc(d.name)}" placeholder="e.g. Tonkotsu King">
     <label class="f">Category</label>
     <select data-f="cat">${S.cats.map(c => `<option value="${c.id}" ${c.id === d.cat ? 'selected' : ''}>${esc(c.emoji + ' ' + c.name)}</option>`).join('')}<option value="" ${!cat(d.cat) ? 'selected' : ''}>Uncategorised</option><option value="__new">＋ New category…</option></select>
-    <label class="f">Overall rating · ${RL[d.rating]}</label>${stars(d.rating)}
     <label class="f">Price${S.currency ? ' (' + esc(S.currency) + ')' : ''}</label>
     <div class="row"><input data-f="pmin" value="${esc(d.pmin)}" inputmode="decimal" placeholder="From, e.g. 15"><span class="muted">–</span><input data-f="pmax" value="${esc(d.pmax)}" inputmode="decimal" placeholder="To (optional)"></div>
     ${cat(d.cat) ? `<label class="f">Details · ${esc(cat(d.cat).name)}</label>`
       + cat(d.cat).quals.map(q => `<div class="qrow"><span class="grow">${esc(q.name)}</span>${stars(d.qr[q.id] || 0, false, 'qstar', `data-q="${q.id}"`)}</div>`).join('')
       + '<button class="btn sm ghost" data-act="qual-new">＋ Add qualifier</button>' : ''}
+    ${overallBlock(d)}
     <label class="f">Comment</label><textarea data-f="note" placeholder="What to order, tips, who recommended it…">${esc(d.note)}</textarea>
     <div class="row" style="margin-top:14px">${d.id ? '<button class="btn danger" data-act="del">Delete</button>' : ''}<button class="btn primary grow" data-act="save">Save place</button></div>`);
 }

@@ -8,11 +8,13 @@ body{padding-top:env(safe-area-inset-top)}
 .logo{width:26px;height:38px;flex:none;color:var(--accent);margin-left:6px;overflow:visible}
 .tag{margin-left:auto;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
 
-#view{height:calc(100dvh - 52px - env(safe-area-inset-top) - var(--tabs) - env(safe-area-inset-bottom));overflow-y:auto;position:relative}
-#view.pad{padding:16px;max-width:640px;margin:0 auto}
+/* the view fills exactly the space between the header and the tab bar (same --tabs height as Heavy Metal) */
+#view{position:fixed;left:0;right:0;top:calc(52px + env(safe-area-inset-top));bottom:calc(var(--tabs) + env(safe-area-inset-bottom));overflow-y:auto;-webkit-overflow-scrolling:touch}
+#view.pad{padding:16px 16px 24px}
+#view.pad>*{max-width:640px;margin-left:auto;margin-right:auto}
 #tabs{position:fixed;left:0;right:0;bottom:0;height:calc(var(--tabs) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);display:flex;background:#0b121a;border-top:1px solid var(--line);z-index:1000}
-#tabs button{flex:1;border:0;background:none;color:var(--muted);font:inherit;font-size:11px;letter-spacing:.06em;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
-#tabs button svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#tabs button{flex:1;border:0;background:none;color:var(--muted);font:inherit;font-size:10px;letter-spacing:.14em;text-transform:uppercase;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+#tabs button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #tabs button.on{color:var(--accent)}
 
 h2{font:700 20px var(--head);margin:0 0 10px} h3{font:700 15px var(--head);color:var(--muted);margin:18px 0 8px;text-transform:uppercase;letter-spacing:.1em}
@@ -58,7 +60,7 @@ label.f{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercas
 /* bottom sheet */
 #sheet{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
 #sheet[hidden]{display:none}
-#sheet .panel{width:100%;max-width:640px;max-height:88dvh;overflow-y:auto;background:var(--card);border-radius:18px 18px 0 0;border:1px solid var(--line);padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+#sheet .panel{width:100%;max-width:640px;max-height:88dvh;overflow-y:auto;background:var(--card);border-radius:18px 18px 0 0;border:1px solid var(--line);padding:16px 16px calc(12px + env(safe-area-inset-bottom))}
 #sheet h2{display:flex;align-items:center;gap:8px}
 #sheet h2 .x{margin-left:auto}
 .x{font:inherit;font-size:22px;line-height:1;color:var(--muted);background:none;border:0;padding:4px 8px}
@@ -67,7 +69,10 @@ label.f{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercas
 .stars{display:flex;gap:2px}
 .stars button{font-size:30px;line-height:1;color:#3b4b60;background:none;border:0;padding:2px 4px}
 .stars button.on{color:var(--c,#f5c518)}
-.stars.ro span{font-size:16px;color:#3b4b60}.stars.ro span.on{color:var(--c,#f5c518)}
+.stars.ro{align-items:center}
+.stars.ro span{font-size:16px;color:transparent;background:linear-gradient(90deg,var(--c,#f5c518) var(--p,0%),#3b4b60 var(--p,0%));-webkit-background-clip:text;background-clip:text}
+.stars.ro b{margin-left:6px;font-size:14px;color:var(--c,#f5c518)}
+.overall .stars.ro span{font-size:26px}.overall .stars.ro b{font-size:18px}
 
 /* search results */
 .res{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:6px}
