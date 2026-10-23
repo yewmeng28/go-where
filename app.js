@@ -346,20 +346,20 @@ function locate(cb) {
 }
 
 // reports what iOS says about location so a block can be traced to its cause
-async function locationCheck() {
+function locationCheck() {
   const out = $('#locout'), line = s => { out.textContent += s + '\n'; };
   out.textContent = '';
   line(`Page: ${location.origin}`);
   line(`https: ${window.isSecureContext ? 'yes' : 'NO (location is blocked on http)'}`);
   line(`Opened as: ${navigator.standalone ? 'Home Screen app' : 'Safari tab / browser'}`);
-  try { line(`Permission: ${(await navigator.permissions.query({ name: 'geolocation' })).state}`); }
-  catch (e) { line('Permission: not reported by this browser'); }
   if (!navigator.geolocation) return line('No geolocation support');
   line('Asking for position…');
+  // asked first, straight from the tap, so nothing async can separate it from the user's gesture
   navigator.geolocation.getCurrentPosition(
     pos => line(`OK: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)} (±${Math.round(pos.coords.accuracy)} m)`),
     e => line(`Error ${e.code} (${['', 'permission denied', 'position unavailable', 'timeout'][e.code] || 'unknown'}): ${e.message}`),
     { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 });
+  navigator.permissions?.query({ name: 'geolocation' }).then(s => line(`Permission state: ${s.state}`), () => line('Permission state: not reported'));
 }
 
 function savePin() {
