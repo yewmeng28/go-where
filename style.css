@@ -105,3 +105,5 @@ label.f{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercas
 .catblock{padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--line)}
 .catblock:last-of-type{border-bottom:0;margin-bottom:0}
 
+
+pre#locout{white-space:pre-wrap;word-break:break-word;margin:6px 0 0;color:var(--text);font-family:ui-monospace,Menlo,monospace}

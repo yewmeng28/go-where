@@ -249,6 +249,9 @@ function renderManage(v) {
       <div class="sm muted">Shown before prices, e.g. ${esc(S.currency)}15–30. Sort by price on the List tab.</div></div>
     <h3>Pin colours</h3>
     <div class="card"><div class="legend">${RC.map((c, i) => `<span><span class="dot" style="background:${c}"></span>${i ? i + ' ' : ''}${RL[i]}</span>`).join('')}</div></div>
+    <h3>Location check</h3>
+    <div class="card"><div class="sm muted">Shows what this device tells the app about location. Tap it from the same place you use the app (Home Screen icon or Safari tab).</div>
+      <div class="row"><button class="btn" data-act="loc-check">Test location</button></div><pre id="locout" class="sm"></pre></div>
     <h3>Data</h3>
     <div class="card"><div class="sm muted">${S.pins.length} places · ${S.cats.length} categories, stored on this device only.</div>
       <div class="row wrap"><button class="btn" data-act="export">Export JSON</button><button class="btn" data-act="import-merge">Import (merge)</button><button class="btn danger" data-act="import-replace">Import (replace)</button></div>
@@ -340,6 +343,23 @@ function locate(cb) {
   navigator.geolocation.getCurrentPosition(ok, e => (e.code === 3
     ? navigator.geolocation.getCurrentPosition(ok, fail, { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 })
     : fail(e)), { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
+}
+
+// reports what iOS says about location so a block can be traced to its cause
+async function locationCheck() {
+  const out = $('#locout'), line = s => { out.textContent += s + '\n'; };
+  out.textContent = '';
+  line(`Page: ${location.origin}`);
+  line(`https: ${window.isSecureContext ? 'yes' : 'NO (location is blocked on http)'}`);
+  line(`Opened as: ${navigator.standalone ? 'Home Screen app' : 'Safari tab / browser'}`);
+  try { line(`Permission: ${(await navigator.permissions.query({ name: 'geolocation' })).state}`); }
+  catch (e) { line('Permission: not reported by this browser'); }
+  if (!navigator.geolocation) return line('No geolocation support');
+  line('Asking for position…');
+  navigator.geolocation.getCurrentPosition(
+    pos => line(`OK: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)} (±${Math.round(pos.coords.accuracy)} m)`),
+    e => line(`Error ${e.code} (${['', 'permission denied', 'position unavailable', 'timeout'][e.code] || 'unknown'}): ${e.message}`),
+    { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 });
 }
 
 function savePin() {
@@ -463,6 +483,7 @@ document.addEventListener('click', e => {
       S.cats = S.cats.filter(x => x.id !== id); ui.filter = ui.filter.filter(x => x !== id);
       S.pins.forEach(p => { if (p.cat === id) p.cat = ''; }); save(); render(); break;
     }
+    case 'loc-check': locationCheck(); break;
     case 'export': exportJson(); break;
     case 'import-merge': importJson('merge'); break;
     case 'import-replace': importJson('replace'); break;
