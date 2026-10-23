@@ -58,7 +58,8 @@ let S = load();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Could not save (storage full or blocked)'); } }
 try { navigator.storage?.persist?.(); } catch (e) { /* ignore */ }
 
-const ui = { tab: 'map', map: null, layer: null, me: null, view: null, pick: null, draft: null, sort: 'recent', filter: [], minOverall: 0, minQ: {}, maxPrice: 0, results: [], busy: false };
+const ui = { tab: 'map', map: null, layer: null, me: null, view: null, pick: null, draft: null, sort: 'recent', filter: [], minOverall: 0, minQ: {}, maxPrice: 0, results: [], busy: false,
+  spin: { km: 5, maxPrice: 0, off: [], rot: 0, items: [], winner: null, busy: false, tried: false } };
 
 let toastT;
 function toast(msg, ms = 2600) {
@@ -120,6 +121,8 @@ function render(keep) {
   v.className = ui.tab === 'map' ? 'map' : '';
   if (ui.tab === 'map') renderMap(v);
   else if (ui.tab === 'list') renderList(v);
+  else if (ui.tab === 'goWhere') renderSpin(v);
+  else if (ui.tab === 'about') renderAbout(v);
   else renderManage(v);
   scroller().scrollTop = y;
 }
@@ -250,7 +253,7 @@ function renderManage(v) {
     <h3>Pin colours</h3>
     <div class="card"><div class="legend">${RC.map((c, i) => `<span><span class="dot" style="background:${c}"></span>${i ? i + ' ' : ''}${RL[i]}</span>`).join('')}</div></div>
     <h3>Location check</h3>
-    <div class="card"><div class="sm muted">Shows what this device tells the app about location. Tap it from the same place you use the app (Home Screen icon or Safari tab).</div>
+    <div class="card"><div class="sm muted">Shows what this device tells the app about location. Tap it from the same place you use the app.</div>
       <div class="row"><button class="btn" data-act="loc-check">Test location</button></div><pre id="locout" class="sm"></pre></div>
     <h3>Data</h3>
     <div class="card"><div class="sm muted">${S.pins.length} places · ${S.cats.length} categories, stored on this device only.</div>
@@ -336,9 +339,9 @@ function locate(cb) {
   if (!navigator.geolocation) return toast('This browser has no location support', 5000);
   const ok = pos => { ui.me = { lat: pos.coords.latitude, lng: pos.coords.longitude }; cb && cb(); };
   const fail = e => toast(e.code === 1
-    ? 'Location is blocked for GoWhere. Settings › Privacy & Security › Location Services: turn it on, and set GoWhere (or Safari Websites) to While Using.'
+    ? 'Location is blocked for this site. In Safari tap aA › Website Settings › Location › Allow, then try again. Also check Settings › Privacy & Security › Location Services.'
     : e.code === 3 ? 'Could not get a position in time. Try again with Wi-Fi on, or outdoors.'
-      : 'Position unavailable. Check Location Services is on for this device.', 7000);
+      : 'Position unavailable. Check Location Services is on for this device.', 8000);
   // GPS first; if that times out (indoors), retry with the coarser Wi-Fi/cell position
   navigator.geolocation.getCurrentPosition(ok, e => (e.code === 3
     ? navigator.geolocation.getCurrentPosition(ok, fail, { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 })
@@ -420,10 +423,178 @@ function importJson(mode) {
   f.click();
 }
 
+/* ---------- about: how to use the app ---------- */
+const ABOUT = [
+  ['Save a place', `<ol><li>On the <b>Map</b> tab tap <b>+</b>.</li>
+    <li>Set where it is: <b>search</b> a name or address, tap <b>◎ My location</b>, or <b>⌖ Pick on map</b> and move the map under the pin. You can also <b>long-press</b> the map to start a pin right there.</li>
+    <li>Give it a name, choose a category, rate it, add a price and a comment, then <b>Save place</b>.</li></ol>
+    <p>Tap a pin on the map, or a card in the List, to see its details, get <b>Directions</b> in Apple Maps, or <b>Edit</b> or delete it.</p>`],
+  ['Ratings and colours', `<p>Each category has its own 5-star <b>details</b> (Food: Taste, Value for money, Atmosphere…). Rate the ones you care about; tap the same star again to clear it.</p>
+    <p>The <b>overall rating</b> is the average of the details you rated, to one decimal (e.g. 4.3). A category with no details uses a plain star rating.</p>
+    <p>Pins are coloured by overall rating, from red (1) through orange, yellow and lime to green (5). Grey means not rated yet.</p>`],
+  ['Categories and details', `<p>Open <b>Manage</b> to add your own categories (a name and an emoji), rename them or delete them. Deleting a category keeps its places as "Other".</p>
+    <p>Each category has its own list of 5-star details. Add one under the category, or tap <b>＋ Add qualifier</b> while saving a place (e.g. Parking, Kid-friendly). Removing a detail clears its ratings.</p>`],
+  ['Price', `<p>Every place can have a price: one amount, or a from–to range such as 15–30. Choose the currency symbol under <b>Manage › Price</b>.</p>
+    <p>On the <b>List</b> tab, <b>Price ↑</b> and <b>Price ↓</b> sort by price. A range counts as its middle, and places with no price go last.</p>`],
+  ['Filter and sort', `<p>The chips at the top of the Map and List select categories. Pick several to combine them; <b>All</b> clears them.</p>
+    <p>The <b>★ Ratings</b> chip sets minimums: overall rating, any detail of the chosen categories (e.g. Atmosphere at least 4) and a <b>Max price</b>.</p>
+    <p>The List can be sorted by <b>Recent</b>, <b>Top</b> rated, <b>Nearby</b>, or <b>Price</b>.</p>`],
+  ['Can\'t decide? Go Where?', `<p>Open the <b>Go Where?</b> tab, set a range in km, optionally a <b>max price</b> (places priced above it, or with no price, are left out), and choose at least one category. Each chip shows how many places match. Tap <b>Spin the wheel</b> and the wheel picks one at random, with a card to get directions.</p>
+    <p>The wheel has about 4 slices per chosen category (6 to 16 in all). If more places match than fit, it shows a spread across your categories, always including the winner. It needs your location.</p>`],
+  ['Location', `<p>Location is only used for <b>◎ My location</b>, the <b>Nearby</b> sort and <b>Go Where?</b>. Searching, picking on the map and long-pressing work without it.</p>
+    <p>If location is blocked: in Safari tap <b>aA › Website Settings › Location › Allow</b>, and check Settings › Privacy &amp; Security › Location Services. <b>Manage › Test location</b> shows what the phone reports.</p>`],
+  ['Your data', `<p>Everything is stored only on this phone, in this browser. Nothing is uploaded. Use <b>Manage › Export JSON</b> to back up or move to another device, and <b>Import</b> (merge or replace) to bring it back. Export now and then, since Safari can clear site data.</p>
+    <p>The map and place search need an internet connection. Your saved places, the list and the wheel work offline, but the map stays blank without a connection.</p>`],
+];
+
+function renderAbout(v) {
+  v.innerHTML = `<h2>How to use GoWhere</h2>
+    <div class="sm muted" style="margin-bottom:12px">Save the places you want to remember, rate them, and let the wheel decide when you can't.</div>`
+    + ABOUT.map(([title, body], i) => `<details class="card about" ${i === 0 ? 'open' : ''}><summary>${title}</summary>${body}</details>`).join('');
+}
+
+/* ---------- spin: let the wheel pick where to go ---------- */
+const WHEEL = ['#2ec4b6', '#ff9f1c', '#e71d36', '#9b5de5', '#3a86ff', '#8ac926', '#ff006e', '#ffbe0b', '#06d6a0', '#f15bb5', '#00bbf9', '#fb5607'];
+// slices on the wheel grow with the chosen categories (a few per category that has places in range), within a readable range
+const SLICES_PER_CAT = 4, WHEEL_MIN = 6, WHEEL_CAP = 16;
+
+const catKey = p => cat(p.cat) ? p.cat : '__none';
+// categories switched on (all of them unless some were turned off), including "Other" when there are uncategorised places
+const spinCats = () => [...S.cats.map(c => c.id), ...(S.pins.some(p => !cat(p.cat)) ? ['__none'] : [])].filter(id => !ui.spin.off.includes(id));
+// a max price keeps places whose lowest price is at or below it; places with no price are left out while it is set
+const spinPriceOk = p => !ui.spin.maxPrice || (p.pmin != null && p.pmin <= ui.spin.maxPrice);
+const inRange = () => ui.me ? S.pins.filter(p => dist(ui.me, p) <= ui.spin.km && spinPriceOk(p)) : [];
+const spinCandidates = () => { const on = spinCats(); return inRange().filter(p => on.includes(catKey(p))).sort((a, b) => dist(ui.me, a) - dist(ui.me, b)); };
+
+// unbiased random integer in [0, n)
+function rand(n) {
+  const a = new Uint32Array(1), lim = 2 ** 32 - (2 ** 32 % n);
+  do crypto.getRandomValues(a); while (a[0] >= lim);
+  return a[0] % n;
+}
+function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+const wheelSize = cands => Math.min(cands.length, Math.min(WHEEL_CAP, Math.max(WHEEL_MIN, new Set(cands.map(catKey)).size * SLICES_PER_CAT)));
+
+// `size` places taken one category at a time (round-robin), so every chosen category with places is represented
+function spread(cands, size, pick = a => a) {
+  const groups = {};
+  cands.forEach(p => (groups[catKey(p)] ||= []).push(p));
+  const lists = pick(Object.values(groups)).map(g => pick(g));
+  const out = [];
+  for (let i = 0; out.length < size && lists.some(l => i < l.length); i++) lists.forEach(l => { if (i < l.length && out.length < size) out.push(l[i]); });
+  return out;
+}
+
+// the winner is drawn uniformly from every candidate; the wheel then shows it with a spread of the others across the categories
+function buildWheel(cands) {
+  const winner = cands[rand(cands.length)];
+  const size = wheelSize(cands);
+  const others = spread(cands.filter(p => p !== winner), size - 1, shuffle);
+  const items = shuffle([winner, ...others]);
+  return { items, idx: items.indexOf(winner) };
+}
+
+// rotation that leaves slice `idx` (of n) under the pointer at the top, after `turns` extra full turns
+function landingRot(rot, idx, n, jitter, turns) {
+  const seg = 2 * Math.PI / n, full = 2 * Math.PI;
+  const target = -Math.PI / 2 - (idx + 0.5 + jitter * 0.8) * seg;     // jitter in (-0.5, 0.5): land off-centre in the slice
+  return rot + ((target - rot) % full + full) % full + turns * full;
+}
+
+function renderSpin(v) {
+  const s = ui.spin;
+  v.innerHTML = `<h2>Go Where?</h2>
+    <div class="card">
+      <div class="row"><span class="grow">Within <b id="kmval">${s.km}</b> km</span><button class="btn sm" data-act="spin-loc">◎ ${ui.me ? 'Update' : 'Use my'} location</button></div>
+      <input type="range" min="1" max="50" step="1" value="${s.km}" data-spinkm aria-label="Range in km">
+      <div class="row"><span class="grow">Max price${S.currency ? ' (' + esc(S.currency) + ')' : ''}</span><input data-spinmax inputmode="decimal" style="width:110px" value="${s.maxPrice || ''}" placeholder="No limit" aria-label="Max price"></div>
+      <label class="f">Categories (at least one)</label>
+      <div class="spinchips" id="spinchips"></div>
+      <div id="spininfo" class="sm muted" style="margin-top:8px"></div>
+    </div>
+    <div class="wheelbox"><div class="pointer"></div><canvas id="wheel"></canvas></div>
+    <button class="btn primary block spinbtn" id="spinbtn" data-act="spin-go">Decide My Fate</button>
+    <div id="spinres"></div>`;
+  updateSpin();
+}
+
+function updateSpin() {
+  if (!$('#spinchips')) return;
+  const s = ui.spin, on = spinCats(), near = inRange(), cands = spinCandidates();
+  const chip = (id, label) => `<button class="chip ${on.includes(id) ? 'on' : ''}" data-act="spin-cat" data-id="${id}">${label} · ${near.filter(p => catKey(p) === id).length}</button>`;
+  $('#spinchips').innerHTML = S.cats.map(c => chip(c.id, `${esc(c.emoji)} ${esc(c.name)}`)).join('')
+    + (S.pins.some(p => !cat(p.cat)) ? chip('__none', 'Other') : '');
+  $('#spininfo').textContent = !ui.me ? 'Turn on location to see what is nearby.'
+    : `${cands.length} place${cands.length === 1 ? '' : 's'} within ${s.km} km in the chosen categories${s.maxPrice ? `, priced up to ${S.currency}${fmtNum(s.maxPrice)}` : ''}`
+      + (cands.length > wheelSize(cands) ? ` · the wheel shows ${wheelSize(cands)} of them, spread across your categories, including the winner` : '');
+  if (!s.busy && !s.winner) s.items = spread(cands, wheelSize(cands));          // preview until a spin has been made
+  $('#spinbtn').disabled = s.busy || !cands.length;
+  for (const el of document.querySelectorAll('[data-spinkm], [data-spinmax]')) el.disabled = s.busy;
+  const w = s.winner, c = w && cat(w.cat);
+  $('#spinres').innerHTML = !w ? '' : `<div class="card result">
+    <div class="sm muted">Go to…</div><h2>${esc(c?.emoji || '📍')} ${esc(w.name)}</h2>
+    <div class="sm muted">${c ? esc(c.name) : 'Uncategorised'}${w.pmin != null ? ' · ' + esc(priceText(w)) : ''} · ${fmtDist(dist(ui.me, w))} away</div>
+    <div style="margin:6px 0">${stars(pinRating(w), true, '', '', true)}</div>${w.note ? `<div class="note" style="white-space:pre-wrap">${esc(w.note)}</div>` : ''}
+    <div class="row"><a class="btn primary grow" style="text-align:center;text-decoration:none" href="${mapsUrl(w)}">Directions</a><button class="btn grow" data-act="detail" data-id="${w.id}">Details</button></div></div>`;
+  drawWheel();
+}
+
+function drawWheel() {
+  const cv = $('#wheel');
+  if (!cv?.getContext) return;
+  const dpr = window.devicePixelRatio || 1, size = cv.clientWidth || 300;
+  cv.width = cv.height = Math.round(size * dpr);
+  const g = cv.getContext('2d'), items = ui.spin.items, n = items.length, r = size / 2 - 6;
+  g.scale(dpr, dpr); g.translate(size / 2, size / 2);
+  if (!n) {
+    g.beginPath(); g.arc(0, 0, r, 0, 2 * Math.PI); g.fillStyle = '#1e2b3a'; g.fill();
+    g.fillStyle = '#8b9bb0'; g.font = '700 64px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', 0, 4);
+    return;
+  }
+  const seg = 2 * Math.PI / n;
+  items.forEach((p, i) => {
+    const a0 = ui.spin.rot + i * seg;
+    g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, r, a0, a0 + seg); g.closePath();
+    g.fillStyle = WHEEL[i % WHEEL.length]; g.fill(); g.strokeStyle = '#0f1720'; g.lineWidth = 2; g.stroke();
+    g.save(); g.rotate(a0 + seg / 2);
+    g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.font = '700 14px -apple-system,system-ui,sans-serif';
+    g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 3;
+    let label = `${cat(p.cat)?.emoji || '📍'} ${p.name}`, text = label;
+    while (g.measureText(text).width > r - 46 && label.length > 1) { label = label.slice(0, -1); text = label + '…'; }
+    g.fillText(text, r - 14, 0); g.restore();
+  });
+  g.beginPath(); g.arc(0, 0, 20, 0, 2 * Math.PI); g.fillStyle = '#0f1720'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#2ec4b6'; g.stroke();
+}
+
+function doSpin() {
+  const s = ui.spin;
+  if (s.busy) return;
+  if (!ui.me) { toast('Needs your location first'); return locate(() => { if (ui.tab === 'goWhere') updateSpin(); }); }
+  const cands = spinCandidates();
+  if (!cands.length) return toast('No places in range for those categories');
+  const { items, idx } = buildWheel(cands);
+  const from = s.rot, to = landingRot(from, idx, items.length, rand(1000) / 1000 - 0.5, 5 + rand(3));
+  s.items = items; s.winner = null; s.busy = true; $('#spinres').innerHTML = ''; updateSpin();
+  const t0 = performance.now(), dur = 5200, ease = x => 1 - (1 - x) ** 4;
+  const step = now => {
+    const x = Math.min((now - t0) / dur, 1);
+    s.rot = from + (to - from) * ease(x);
+    if (x < 1 && ui.tab === 'goWhere') { drawWheel(); return requestAnimationFrame(step); }
+    s.busy = false; s.winner = items[idx];                               // finished (or you left the tab: the result waits for you)
+    if (ui.tab === 'goWhere') updateSpin();
+  };
+  requestAnimationFrame(step);
+}
+
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
   const tab = e.target.closest('#tabs button');
-  if (tab) { ui.tab = tab.dataset.tab; ui.pick = null; render(); return; }
+  if (tab) {
+    ui.tab = tab.dataset.tab; ui.pick = null; render();
+    if (ui.tab === 'goWhere' && !ui.me && !ui.spin.tried) { ui.spin.tried = true; locate(() => { if (ui.tab === 'goWhere') updateSpin(); }); }
+    return;
+  }
   if (e.target.id === 'sheet') return closeSheet();
   const el = e.target.closest('[data-act]');
   if (!el) return;
@@ -484,6 +655,13 @@ document.addEventListener('click', e => {
       S.pins.forEach(p => { if (p.cat === id) p.cat = ''; }); save(); render(); break;
     }
     case 'loc-check': locationCheck(); break;
+    case 'spin-cat': {
+      const s = ui.spin; if (s.busy) break;
+      if (!s.off.includes(id) && spinCats().length === 1) { toast('Pick at least one category'); break; }
+      s.off = s.off.includes(id) ? s.off.filter(x => x !== id) : [...s.off, id]; s.winner = null; updateSpin(); break;
+    }
+    case 'spin-loc': locate(() => { ui.spin.winner = null; if (ui.tab === 'goWhere') updateSpin(); }); break;
+    case 'spin-go': doSpin(); break;
     case 'export': exportJson(); break;
     case 'import-merge': importJson('merge'); break;
     case 'import-replace': importJson('replace'); break;
@@ -491,6 +669,13 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('input', e => {
+  if (e.target.dataset.spinmax !== undefined) {                   // max price on the Spin tab
+    ui.spin.maxPrice = num(e.target.value) || 0; ui.spin.winner = null; updateSpin(); return;
+  }
+  if (e.target.dataset.spinkm !== undefined) {                    // range slider on the Spin tab
+    ui.spin.km = +e.target.value; ui.spin.winner = null;
+    $('#kmval').textContent = ui.spin.km; updateSpin(); return;
+  }
   const f = e.target.dataset.f;
   if (!f || e.target.dataset.cat || e.target.tagName === 'SELECT') return;
   ui.draft[f] = e.target.value;

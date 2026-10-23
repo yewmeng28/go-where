@@ -4,7 +4,7 @@
   "description": "Save and rate the places you want to remember",
   "start_url": "./",
   "scope": "./",
-  "display": "standalone",
+  "display": "browser",
   "background_color": "#0f1720",
   "theme_color": "#0f1720",
   "icons": [

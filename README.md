@@ -12,6 +12,8 @@ Plain HTML/CSS/JS, no build step, no backend, no accounts. Data lives in your br
 - **Rating filters:** the **★ Ratings** chip sets a minimum for the overall rating and for any qualifier of the selected categories (e.g. Food + Atmosphere ≥ 4).
 - **Categories:** **Manage** lets you add your own (name + emoji), rename or delete them. The chips above the map and list filter the pins; select several to combine them.
 - **List tab:** the same places as cards, sorted by recent, top rated or nearby.
+- **About tab:** the same how-to, built into the app (collapsible sections).
+- **Go Where? tab (can't decide?):** set a range in km, optionally a max price (keeps places starting at or below it; unpriced places are left out while it's set), pick at least one category (each chip shows how many places match), and spin the wheel. The winner is drawn at random, evenly across every matching place; the wheel has about 4 slices per chosen category (6 to 16 in all), and if more places match than fit it shows a spread across your categories that always includes the winner. Needs your location (◎).
 - **Directions:** open a place and tap **Directions** to hand off to Apple Maps.
 
 ## Run locally
@@ -20,16 +22,22 @@ Plain HTML/CSS/JS, no build step, no backend, no accounts. Data lives in your br
 
 ## Deploy (GitHub Pages)
 
-Push to GitHub, then Settings → Pages → *Deploy from a branch* → `main` / `/ (root)`. Open the URL in **Safari** on your iPhone and use Share → **Add to Home Screen**.
+Push to GitHub, then Settings → Pages → *Deploy from a branch* → `main` / `/ (root)`. Open the URL in **Safari** on your iPhone and use Share → **Add to Home Screen**. GoWhere is set up as a **Safari shortcut** (`display: browser`, no web-app meta tags): the icon opens it in Safari, because iOS never shows the location prompt inside a Home Screen web app. If the Add to Home Screen sheet has an **Open as Web App** switch, leave it off.
 
 ## Location troubleshooting (iPhone)
 
-1. **Use the https address.** Geolocation is blocked on plain `http://` pages (a `http://192.168.x.x:8000` dev server on your phone will never work; `http://localhost` only works on the machine running it). The GitHub Pages URL is https, so use that.
-2. **Settings › Privacy & Security › Location Services** must be **on**, and **Safari Websites** set to *While Using the App* or *Ask*. iOS has no separate entry for Home Screen web apps; they use that one.
-3. If it was denied once and never asks again: delete the Home Screen icon and add it again (this resets that app's permission), or use **Settings › General › Transfer or Reset iPhone › Reset › Reset Location & Privacy** to make every app ask again.
-4. Try it in a Safari tab first: the **aA** menu › **Website Settings › Location** shows *Ask / Allow / Deny* for the site.
-5. **Manage › Location check › Test location** prints what the device reports (https, Home Screen vs Safari tab, permission state, and the exact error). Use it to see which case you are in.
-6. The message shown in the app says which case it is: blocked (permission), timed out (retry on Wi-Fi or outdoors), or unavailable.
+Location is only used by **◎ My location** and the **Nearby** sort; searching, picking on the map and long-pressing the map work without it.
+
+If ◎ says location is blocked:
+1. **Open GoWhere in Safari** (the Home Screen icon is set up as a Safari shortcut). iOS never shows the location prompt inside a Home Screen web app.
+2. Tap **aA** in the address bar › **Website Settings** › **Location** › **Allow**. This is the usual fix: a site that was denied once stays denied even when Settings › Privacy & Security › Location Services › Safari Websites is allowed.
+3. Check **Settings › Privacy & Security › Location Services** is on, **Safari Websites** isn't *Never*, and **Precise Location** is on.
+4. Still denied? Settings › Apps › Safari › Advanced › Website Data: remove the site, or Settings › General › Transfer or Reset iPhone › Reset › **Reset Location & Privacy**. On a work phone, a device profile or Screen Time restriction can block location altogether.
+5. Location only works on **https** pages and while the app is open (no background tracking).
+
+**Manage › Location check › Test location** prints what the device reports (https, Safari tab vs Home Screen, permission state and the exact error), which helps when the in-app message isn't enough.
+
+The message shown in the app says which case it is: blocked, timed out (try again on Wi-Fi or outdoors), or unavailable.
 
 ## Notes
 

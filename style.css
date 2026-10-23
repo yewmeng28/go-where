@@ -107,3 +107,28 @@ label.f{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercas
 
 
 pre#locout{white-space:pre-wrap;word-break:break-word;margin:6px 0 0;color:var(--text);font-family:ui-monospace,Menlo,monospace}
+
+/* spin: wheel of fortune */
+.spinchips{display:flex;flex-wrap:wrap;gap:6px}
+.spinchips .chip{background:var(--card2)}
+.spinchips .chip.on{background:var(--accent)}
+input[type=range]{padding:0;height:34px;accent-color:var(--accent);background:none;border:0}
+.wheelbox{position:relative;width:min(88vw,340px);aspect-ratio:1;margin:14px auto 12px}
+.wheelbox canvas{width:100%;height:100%;display:block;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5))}
+.pointer{position:absolute;left:50%;top:-6px;width:0;height:0;margin-left:-14px;z-index:2;border-left:14px solid transparent;border-right:14px solid transparent;border-top:26px solid #fff;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+.spinbtn{font-size:18px;letter-spacing:.04em}
+.spinbtn:disabled{opacity:.45}
+.result{margin-top:14px;border-color:var(--accent);animation:pop .35s ease-out}
+@keyframes pop{from{transform:scale(.94);opacity:0}to{transform:none;opacity:1}}
+
+/* about */
+details.about{padding:0}
+details.about summary{list-style:none;cursor:pointer;padding:14px;font:700 16px var(--head);display:flex;align-items:center;justify-content:space-between}
+details.about summary::-webkit-details-marker{display:none}
+details.about summary::after{content:"+";font-size:22px;color:var(--accent);line-height:1}
+details.about[open] summary::after{content:"−"}
+details.about p{margin:0 14px 10px;font-size:15px}
+details.about ol{margin:0 14px 10px;padding-left:36px;font-size:15px}
+details.about li{margin-bottom:6px}
+details.about>:last-child{margin-bottom:14px}
+details.about b{color:var(--accent);font-weight:600}
