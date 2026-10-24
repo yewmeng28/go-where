@@ -5,15 +5,16 @@ Plain HTML/CSS/JS, no build step, no backend, no accounts. Data lives in your br
 
 ## How to use
 
-- **Add a place:** tap **+** on the map, then search a name or address, tap **◎ My location**, or **⌖ Pick on map** and move the map under the pin. You can also long-press the map to start a pin there.
+- **Add a place:** tap the **+** in the middle of the tab bar (it works from any tab), then search a name or address, tap **◎ My location**, or **⌖ Pick on map** and move the map under the pin. You can also long-press the map to start a pin there.
 - **Rate it:** rate each detail of the place's category in stars (tap the same star again to clear) and add a comment. The **overall rating is the average of the details you rated**, to one decimal (e.g. 4.3 ★). A category with no qualifiers uses a plain star rating instead. The pin colour follows the overall rating, blending from red (1) through orange, yellow and lime to green (5); grey means unrated.
 - **Details per category:** each category has its own 5-star qualifiers (Food: Taste, Value for money, Atmosphere, Service; Cafe: Coffee, Work-friendly, and so on). More stars is always better, so "Value for money" = cheaper. Rate them when saving a place; they feed the overall rating. Add your own with **＋ Add qualifier** in the form, or manage them per category under **Manage**.
 - **Price:** every place, in any category (including your own), has a built-in price: one amount or a from–to range (e.g. 15–30 per person). Pick the currency symbol under **Manage**. The **Price ↑ / Price ↓** buttons on the List tab sort by it (a range counts as its middle; places without a price go last), and the **★ Ratings** chip has a **Max price** filter that keeps places starting at or below it.
 - **Rating filters:** the **★ Ratings** chip sets a minimum for the overall rating and for any qualifier of the selected categories (e.g. Food + Atmosphere ≥ 4).
 - **Categories:** **Manage** lets you add your own (name + emoji), rename or delete them. The chips above the map and list filter the pins; select several to combine them.
 - **List tab:** the same places as cards, sorted by recent, top rated or nearby.
-- **About tab:** the same how-to, built into the app (collapsible sections).
-- **Go Where? tab (can't decide?):** set a range in km, optionally a max price (keeps places starting at or below it; unpriced places are left out while it's set), pick at least one category (each chip shows how many places match), and spin the wheel. The winner is drawn at random, evenly across every matching place; the wheel has about 4 slices per chosen category (6 to 16 in all), and if more places match than fit it shows a spread across your categories that always includes the winner. Needs your location (◎).
+- **Visits and spending:** open a place and tap **＋ Log a visit** (date, plus what you spent if you like). Each place keeps a visit counter, a total spent, and the date of the last visit; the List shows them and Manage shows the totals for everything. The wheel's result has a **✓ I went here** shortcut.
+- **How to use:** the same how-to is built into the app, in collapsible sections at the bottom of the **Manage** tab.
+- **Go Where? tab (can't decide?):** set a range in km, optionally a max price (keeps places starting at or below it; unpriced places are left out while it's set), narrow by **last visited** (visited within, or not visited within, N days; or never) and **times visited** (min / max), pick at least one category (each chip shows how many places match), and spin the wheel. The winner is drawn at random, evenly across every matching place; the wheel has about 4 slices per chosen category (6 to 16 in all), and if more places match than fit it shows a spread across your categories that always includes the winner. Needs your location (◎).
 - **Directions:** open a place and tap **Directions** to hand off to Apple Maps.
 
 ## Run locally

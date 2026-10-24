@@ -13,6 +13,19 @@ const RL = ['Unrated', 'Poor', 'Meh', 'OK', 'Good', 'Great'];
 const fmtNum = n => Number.isInteger(n) ? String(n) : n.toFixed(2);
 const priceText = p => p.pmin == null ? '' : S.currency + fmtNum(p.pmin) + (p.pmax != null && p.pmax !== p.pmin ? '–' + fmtNum(p.pmax) : '');
 const priceMid = p => p.pmin == null ? null : (p.pmin + (p.pmax ?? p.pmin)) / 2;
+
+// visits: each place keeps a log of { id, d: 'YYYY-MM-DD', spent }; the counter, the total and the last date are all derived from it
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const visitsOf = p => p.visits || [];
+const spentOf = p => visitsOf(p).reduce((a, v) => a + (v.spent || 0), 0);
+const lastVisit = p => visitsOf(p).reduce((m, v) => v.d > m ? v.d : m, '') || null;
+const localDate = d => { const [y, m, day] = d.split('-').map(Number); return new Date(y, m - 1, day); };
+const daysSince = d => { const n = new Date(); return Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - localDate(d)) / 864e5); };
+const fmtDate = d => localDate(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const spentText = n => S.currency + fmtNum(n);
+// "3 visits · S$72 spent" (or '' when never visited)
+const visitSummary = p => visitsOf(p).length ? plural(visitsOf(p).length, 'visit') + (spentOf(p) ? ` · ${spentText(spentOf(p))} spent` : '') : '';
 const num = v => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : null; };
 // colour for any rating 0..5: grey when unrated, otherwise blended between the red-to-green steps
 const rc = r => {
@@ -58,8 +71,8 @@ let S = load();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Could not save (storage full or blocked)'); } }
 try { navigator.storage?.persist?.(); } catch (e) { /* ignore */ }
 
-const ui = { tab: 'map', map: null, layer: null, me: null, view: null, pick: null, draft: null, sort: 'recent', filter: [], minOverall: 0, minQ: {}, maxPrice: 0, results: [], busy: false,
-  spin: { km: 5, maxPrice: 0, off: [], rot: 0, items: [], winner: null, busy: false, tried: false } };
+const ui = { tab: 'map', map: null, layer: null, me: null, view: null, pick: null, draft: null, vdraft: null, sort: 'recent', filter: [], minOverall: 0, minQ: {}, maxPrice: 0, results: [], busy: false,
+  spin: { km: 5, maxPrice: 0, last: '', vmin: null, vmax: null, off: [], rot: 0, items: [], winner: null, busy: false, tried: false } };
 
 let toastT;
 function toast(msg, ms = 2600) {
@@ -122,7 +135,6 @@ function render(keep) {
   if (ui.tab === 'map') renderMap(v);
   else if (ui.tab === 'list') renderList(v);
   else if (ui.tab === 'goWhere') renderSpin(v);
-  else if (ui.tab === 'about') renderAbout(v);
   else renderManage(v);
   scroller().scrollTop = y;
 }
@@ -149,7 +161,7 @@ function renderMap(v) {
       ? `<svg class="crosshair" viewBox="0 0 24 24"><use href="#pin"/></svg>
          <div id="pickbar"><div class="grow sm">Move the map so the pin sits on the place</div>
          <button class="btn sm ghost" data-act="pick-cancel">Cancel</button><button class="btn sm primary" data-act="pick-ok">Set here</button></div>`
-      : `<button class="fab loc" data-act="locate" aria-label="My location">◎</button><button class="fab" data-act="add" aria-label="Add place">+</button>`);
+      : `<button class="fab loc" data-act="locate" aria-label="My location">◎</button>`);
   const token = ui.token = (ui.token || 0) + 1;
   const offline = () => { const m = $('#map'); if (m && token === ui.token) m.innerHTML = '<div class="empty">The map needs an internet connection.<br>Your places are still in the List tab.</div>'; };
   if (navigator.onLine === false) return offline();
@@ -231,7 +243,7 @@ function renderList(v, keepScroll) {
         <svg class="ic" viewBox="0 0 24 24" style="color:${rc(pinRating(p))}"><use href="#pin"/></svg>
         <div class="grow"><b>${esc(p.name)}</b>
           <div class="sm muted">${c ? esc(c.emoji + ' ' + c.name) : 'Uncategorised'}${p.pmin != null ? ' · ' + esc(priceText(p)) : ''}${ui.me ? ' · ' + fmtDist(dist(ui.me, p)) : ''}</div>
-          ${stars(pinRating(p), true, '', '', true)}${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}</div></div>`;
+          ${visitsOf(p).length ? `<div class="sm visit-line">🔁 ${esc(visitSummary(p))}</div>` : ''}${stars(pinRating(p), true, '', '', true)}${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}</div></div>`;
     }).join('') : `<div class="empty">${S.pins.length ? 'No places in this category.' : 'No places yet.<br>Tap + on the map to save your first one.'}</div>`);
   if (keepScroll) scroller().scrollTop = y;
 }
@@ -256,9 +268,10 @@ function renderManage(v) {
     <div class="card"><div class="sm muted">Shows what this device tells the app about location. Tap it from the same place you use the app.</div>
       <div class="row"><button class="btn" data-act="loc-check">Test location</button></div><pre id="locout" class="sm"></pre></div>
     <h3>Data</h3>
-    <div class="card"><div class="sm muted">${S.pins.length} places · ${S.cats.length} categories, stored on this device only.</div>
+    <div class="card"><div class="sm muted">${S.pins.length} places · ${S.cats.length} categories · ${plural(S.pins.reduce((a, p) => a + visitsOf(p).length, 0), 'visit')}${S.pins.some(spentOf) ? ` · ${esc(spentText(S.pins.reduce((a, p) => a + spentOf(p), 0)))} spent` : ''}, stored on this device only.</div>
       <div class="row wrap"><button class="btn" data-act="export">Export JSON</button><button class="btn" data-act="import-merge">Import (merge)</button><button class="btn danger" data-act="import-replace">Import (replace)</button></div>
-      <div class="sm muted">Export regularly — Safari can clear site data. The Home Screen app and the Safari tab keep separate data.</div></div>`;
+      <div class="sm muted">Export regularly — Safari can clear site data. The Home Screen app and the Safari tab keep separate data.</div></div>
+    ${aboutHtml()}`;
 }
 
 /* ---------- sheet: detail & form ---------- */
@@ -271,12 +284,43 @@ function closeSheet() { $('#sheet').hidden = true; $('#sheet').innerHTML = ''; u
 
 const mapsUrl = p => `https://maps.apple.com/?daddr=${p.lat},${p.lng}&q=${encodeURIComponent(p.name || 'Place')}`;
 
+function visitsBlock(p) {
+  const vs = visitsOf(p).slice().sort((a, b) => b.d.localeCompare(a.d) || 0), last = lastVisit(p);
+  return `<div class="visits"><div class="row"><div class="grow">${vs.length
+      ? `<b>${plural(vs.length, 'visit')}</b>${spentOf(p) ? ` · <b>${esc(spentText(spentOf(p)))}</b> spent` : ''}<div class="sm muted">Last visit ${esc(fmtDate(last))} (${daysSince(last) === 0 ? 'today' : plural(daysSince(last), 'day') + ' ago'})</div>`
+      : '<span class="muted">Not visited yet</span>'}</div>
+      <button class="btn sm primary" data-act="visit-add" data-id="${p.id}">＋ Log a visit</button></div>
+    ${vs.slice(0, 5).map(v => `<div class="vrow"><span class="grow">${esc(fmtDate(v.d))}</span><span>${v.spent != null ? esc(spentText(v.spent)) : '–'}</span><button class="x" data-act="visit-del" data-id="${p.id}" data-v="${v.id}" aria-label="Delete visit">×</button></div>`).join('')}
+    ${vs.length > 5 ? `<div class="sm muted">+ ${vs.length - 5} earlier</div>` : ''}</div>`;
+}
+
+function openVisit(id) {
+  const p = pinOf(id); if (!p) return;
+  ui.vdraft = { id, d: todayStr(), spent: '' };
+  showSheet(`<h2>Log a visit<button class="x" data-act="close">×</button></h2>
+    <div class="sm muted">${esc(p.name)}</div>
+    <label class="f">Date</label><input type="date" data-vf="d" value="${ui.vdraft.d}" max="${todayStr()}">
+    <label class="f">Spent${S.currency ? ' (' + esc(S.currency) + ')' : ''} · optional</label>
+    <input data-vf="spent" inputmode="decimal" placeholder="${p.pmin != null ? 'Usually ' + esc(priceText(p)) : 'e.g. 24.50'}">
+    <div class="row" style="margin-top:14px"><button class="btn grow" data-act="detail" data-id="${id}">Cancel</button><button class="btn primary grow" data-act="visit-save">Save visit</button></div>`);
+}
+
+function saveVisit() {
+  const v = ui.vdraft, p = pinOf(v.id);
+  if (!p) return closeSheet();
+  if (!v.d || v.d > todayStr()) return toast(v.d ? 'A visit can\'t be in the future' : 'Pick a date');
+  (p.visits ||= []).push({ id: uid(), d: v.d, spent: num(v.spent) });
+  save(); if (ui.tab === 'list') render(true);
+  toast('Visit logged'); openDetail(p.id);
+}
+
 function openDetail(id) {
   const p = pinOf(id); if (!p) return;
   const c = cat(p.cat);
   showSheet(`<h2>${esc(p.name)}<button class="x" data-act="close">×</button></h2>
     <div class="sm muted">${c ? esc(c.emoji + ' ' + c.name) : 'Uncategorised'}${p.pmin != null ? ' · ' + esc(priceText(p)) : ''}${ui.me ? ' · ' + fmtDist(dist(ui.me, p)) + ' away' : ''}</div>
     <div style="margin:8px 0">${stars(pinRating(p), true, '', '', true)}</div>
+    ${visitsBlock(p)}
     ${(c?.quals || []).filter(q => p.qr?.[q.id]).map(q => `<div class="qrow"><span class="grow">${esc(q.name)}</span>${stars(p.qr[q.id], true)}</div>`).join('')}
     ${p.note ? `<div style="white-space:pre-wrap;margin:10px 0">${esc(p.note)}</div>` : ''}
     <div class="row"><a class="btn primary grow" style="text-align:center;text-decoration:none" href="${mapsUrl(p)}">Directions</a>
@@ -374,7 +418,7 @@ function savePin() {
   else if (pmax != null && pmax < pmin) [pmin, pmax] = [pmax, pmin];
   const qr = Object.fromEntries(Object.entries(d.qr).filter(([, v]) => v));
   if (d.id) Object.assign(pinOf(d.id), { name, cat: d.cat, rating: d.rating, pmin, pmax, qr, note: d.note.trim(), lat: d.lat, lng: d.lng });
-  else S.pins.push({ id: uid(), name, cat: d.cat, rating: d.rating, pmin, pmax, qr, note: d.note.trim(), lat: d.lat, lng: d.lng, created: Date.now() });
+  else S.pins.push({ id: uid(), name, cat: d.cat, rating: d.rating, pmin, pmax, qr, visits: [], note: d.note.trim(), lat: d.lat, lng: d.lng, created: Date.now() });
   save(); closeSheet();
   if (ui.tab === 'map') ui.view = { c: { lat: d.lat, lng: d.lng }, z: Math.max(ui.map?.getZoom() || 0, 15) };
   render(); toast('Saved');
@@ -425,7 +469,7 @@ function importJson(mode) {
 
 /* ---------- about: how to use the app ---------- */
 const ABOUT = [
-  ['Save a place', `<ol><li>On the <b>Map</b> tab tap <b>+</b>.</li>
+  ['Save a place', `<ol><li>Tap the big <b>+</b> in the middle of the tab bar (it works from any tab).</li>
     <li>Set where it is: <b>search</b> a name or address, tap <b>◎ My location</b>, or <b>⌖ Pick on map</b> and move the map under the pin. You can also <b>long-press</b> the map to start a pin right there.</li>
     <li>Give it a name, choose a category, rate it, add a price and a comment, then <b>Save place</b>.</li></ol>
     <p>Tap a pin on the map, or a card in the List, to see its details, get <b>Directions</b> in Apple Maps, or <b>Edit</b> or delete it.</p>`],
@@ -436,10 +480,12 @@ const ABOUT = [
     <p>Each category has its own list of 5-star details. Add one under the category, or tap <b>＋ Add qualifier</b> while saving a place (e.g. Parking, Kid-friendly). Removing a detail clears its ratings.</p>`],
   ['Price', `<p>Every place can have a price: one amount, or a from–to range such as 15–30. Choose the currency symbol under <b>Manage › Price</b>.</p>
     <p>On the <b>List</b> tab, <b>Price ↑</b> and <b>Price ↓</b> sort by price. A range counts as its middle, and places with no price go last.</p>`],
+  ['Visits and spending', `<p>Open a place and tap <b>＋ Log a visit</b> each time you go: pick the date and, if you like, what you spent. GoWhere keeps a counter of visits and the <b>total spent</b> for each place, shows when you were last there, and lets you delete a wrong entry. The List shows each place's visits and spend, and <b>Manage</b> shows the totals across all places.</p>
+    <p>On the <b>Go Where?</b> tab, <b>✓ I went here</b> on the result logs the visit straight away.</p>`],
   ['Filter and sort', `<p>The chips at the top of the Map and List select categories. Pick several to combine them; <b>All</b> clears them.</p>
     <p>The <b>★ Ratings</b> chip sets minimums: overall rating, any detail of the chosen categories (e.g. Atmosphere at least 4) and a <b>Max price</b>.</p>
     <p>The List can be sorted by <b>Recent</b>, <b>Top</b> rated, <b>Nearby</b>, or <b>Price</b>.</p>`],
-  ['Can\'t decide? Go Where?', `<p>Open the <b>Go Where?</b> tab, set a range in km, optionally a <b>max price</b> (places priced above it, or with no price, are left out), and choose at least one category. Each chip shows how many places match. Tap <b>Spin the wheel</b> and the wheel picks one at random, with a card to get directions.</p>
+  ['Can\'t decide? Go Where?', `<p>Open the <b>Go Where?</b> tab, set a range in km, optionally a <b>max price</b> (places priced above it, or with no price, are left out), and choose at least one category. Narrow it by <b>last visited</b> (for example places you haven't been to in 90 days, or never) and by <b>times visited</b> (a min and max). Each chip shows how many places match. Tap <b>Spin the wheel</b> and the wheel picks one at random, with a card to get directions.</p>
     <p>The wheel has about 4 slices per chosen category (6 to 16 in all). If more places match than fit, it shows a spread across your categories, always including the winner. It needs your location.</p>`],
   ['Location', `<p>Location is only used for <b>◎ My location</b>, the <b>Nearby</b> sort and <b>Go Where?</b>. Searching, picking on the map and long-pressing work without it.</p>
     <p>If location is blocked: in Safari tap <b>aA › Website Settings › Location › Allow</b>, and check Settings › Privacy &amp; Security › Location Services. <b>Manage › Test location</b> shows what the phone reports.</p>`],
@@ -447,11 +493,10 @@ const ABOUT = [
     <p>The map and place search need an internet connection. Your saved places, the list and the wheel work offline, but the map stays blank without a connection.</p>`],
 ];
 
-function renderAbout(v) {
-  v.innerHTML = `<h2>How to use GoWhere</h2>
-    <div class="sm muted" style="margin-bottom:12px">Save the places you want to remember, rate them, and let the wheel decide when you can't.</div>`
-    + ABOUT.map(([title, body], i) => `<details class="card about" ${i === 0 ? 'open' : ''}><summary>${title}</summary>${body}</details>`).join('');
-}
+// the how-to, shown at the bottom of the Manage tab
+const aboutHtml = () => `<h3>How to use GoWhere</h3>
+  <div class="sm muted" style="margin-bottom:10px">Save the places you want to remember, rate them, and let the wheel decide when you can't.</div>`
+  + ABOUT.map(([title, body], i) => `<details class="card about" ${i === 0 ? 'open' : ''}><summary>${title}</summary>${body}</details>`).join('');
 
 /* ---------- spin: let the wheel pick where to go ---------- */
 const WHEEL = ['#2ec4b6', '#ff9f1c', '#e71d36', '#9b5de5', '#3a86ff', '#8ac926', '#ff006e', '#ffbe0b', '#06d6a0', '#f15bb5', '#00bbf9', '#fb5607'];
@@ -462,8 +507,20 @@ const catKey = p => cat(p.cat) ? p.cat : '__none';
 // categories switched on (all of them unless some were turned off), including "Other" when there are uncategorised places
 const spinCats = () => [...S.cats.map(c => c.id), ...(S.pins.some(p => !cat(p.cat)) ? ['__none'] : [])].filter(id => !ui.spin.off.includes(id));
 // a max price keeps places whose lowest price is at or below it; places with no price are left out while it is set
+const LAST_OPTS = [['', 'Any time'], ['in:7', 'Visited in the last 7 days'], ['in:30', 'Visited in the last 30 days'], ['in:90', 'Visited in the last 90 days'], ['in:365', 'Visited in the last year'],
+  ['out:30', 'Not visited in 30 days (or never)'], ['out:90', 'Not visited in 90 days (or never)'], ['out:180', 'Not visited in 6 months (or never)'], ['out:365', 'Not visited in a year (or never)'], ['never', 'Never visited']];
+// last-visited window and number of visits (min / max, blank = no limit)
+function spinVisitOk(p) {
+  const s = ui.spin, n = visitsOf(p).length, last = lastVisit(p), [mode, days] = (s.last || '').split(':');
+  if (s.vmin != null && n < s.vmin) return false;
+  if (s.vmax != null && n > s.vmax) return false;
+  if (mode === 'never') return n === 0;
+  if (mode === 'in') return last != null && daysSince(last) <= +days;
+  if (mode === 'out') return last == null || daysSince(last) > +days;
+  return true;
+}
 const spinPriceOk = p => !ui.spin.maxPrice || (p.pmin != null && p.pmin <= ui.spin.maxPrice);
-const inRange = () => ui.me ? S.pins.filter(p => dist(ui.me, p) <= ui.spin.km && spinPriceOk(p)) : [];
+const inRange = () => ui.me ? S.pins.filter(p => dist(ui.me, p) <= ui.spin.km && spinPriceOk(p) && spinVisitOk(p)) : [];
 const spinCandidates = () => { const on = spinCats(); return inRange().filter(p => on.includes(catKey(p))).sort((a, b) => dist(ui.me, a) - dist(ui.me, b)); };
 
 // unbiased random integer in [0, n)
@@ -509,6 +566,8 @@ function renderSpin(v) {
       <div class="row"><span class="grow">Within <b id="kmval">${s.km}</b> km</span><button class="btn sm" data-act="spin-loc">◎ ${ui.me ? 'Update' : 'Use my'} location</button></div>
       <input type="range" min="1" max="50" step="1" value="${s.km}" data-spinkm aria-label="Range in km">
       <div class="row"><span class="grow">Max price${S.currency ? ' (' + esc(S.currency) + ')' : ''}</span><input data-spinmax inputmode="decimal" style="width:110px" value="${s.maxPrice || ''}" placeholder="No limit" aria-label="Max price"></div>
+      <div class="row"><span class="grow">Last visited</span><select data-spinlast style="width:auto;max-width:64%" aria-label="Last visited">${LAST_OPTS.map(([v, l]) => `<option value="${v}" ${v === s.last ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="row"><span class="grow">Times visited</span><input data-spinvmin inputmode="numeric" style="width:72px" value="${s.vmin ?? ''}" placeholder="min" aria-label="Minimum visits"><span class="muted">–</span><input data-spinvmax inputmode="numeric" style="width:72px" value="${s.vmax ?? ''}" placeholder="max" aria-label="Maximum visits"></div>
       <label class="f">Categories (at least one)</label>
       <div class="spinchips" id="spinchips"></div>
       <div id="spininfo" class="sm muted" style="margin-top:8px"></div>
@@ -530,13 +589,14 @@ function updateSpin() {
       + (cands.length > wheelSize(cands) ? ` · the wheel shows ${wheelSize(cands)} of them, spread across your categories, including the winner` : '');
   if (!s.busy && !s.winner) s.items = spread(cands, wheelSize(cands));          // preview until a spin has been made
   $('#spinbtn').disabled = s.busy || !cands.length;
-  for (const el of document.querySelectorAll('[data-spinkm], [data-spinmax]')) el.disabled = s.busy;
+  for (const el of document.querySelectorAll('[data-spinkm], [data-spinmax], [data-spinlast], [data-spinvmin], [data-spinvmax]')) el.disabled = s.busy;
   const w = s.winner, c = w && cat(w.cat);
   $('#spinres').innerHTML = !w ? '' : `<div class="card result">
     <div class="sm muted">Go to…</div><h2>${esc(c?.emoji || '📍')} ${esc(w.name)}</h2>
     <div class="sm muted">${c ? esc(c.name) : 'Uncategorised'}${w.pmin != null ? ' · ' + esc(priceText(w)) : ''} · ${fmtDist(dist(ui.me, w))} away</div>
     <div style="margin:6px 0">${stars(pinRating(w), true, '', '', true)}</div>${w.note ? `<div class="note" style="white-space:pre-wrap">${esc(w.note)}</div>` : ''}
-    <div class="row"><a class="btn primary grow" style="text-align:center;text-decoration:none" href="${mapsUrl(w)}">Directions</a><button class="btn grow" data-act="detail" data-id="${w.id}">Details</button></div></div>`;
+    <div class="row"><a class="btn primary grow" style="text-align:center;text-decoration:none" href="${mapsUrl(w)}">Directions</a><button class="btn grow" data-act="detail" data-id="${w.id}">Details</button></div>
+    <div class="row"><button class="btn grow" data-act="visit-add" data-id="${w.id}">✓ I went here</button></div></div>`;
   drawWheel();
 }
 
@@ -589,7 +649,7 @@ function doSpin() {
 
 /* ---------- events ---------- */
 document.addEventListener('click', e => {
-  const tab = e.target.closest('#tabs button');
+  const tab = e.target.closest('#tabs button[data-tab]');
   if (tab) {
     ui.tab = tab.dataset.tab; ui.pick = null; render();
     if (ui.tab === 'goWhere' && !ui.me && !ui.spin.tried) { ui.spin.tried = true; locate(() => { if (ui.tab === 'goWhere') updateSpin(); }); }
@@ -601,8 +661,14 @@ document.addEventListener('click', e => {
   const id = el.dataset.id, d = ui.draft;
   switch (el.dataset.act) {
     case 'close': closeSheet(); break;
-    case 'add': openForm(newDraft()); break;
+    case 'add': if (ui.pick) return toast('Move the map, then tap Set here first'); openForm(newDraft()); break;
     case 'detail': openDetail(id); break;
+    case 'visit-add': openVisit(id); break;
+    case 'visit-save': saveVisit(); break;
+    case 'visit-del': {
+      const p = pinOf(id); if (!confirm('Delete this visit?')) break;
+      p.visits = visitsOf(p).filter(v => v.id !== el.dataset.v); save(); if (ui.tab === 'list') render(true); openDetail(id); break;
+    }
     case 'edit': { const p = pinOf(id); openForm({ ...p, pmin: p.pmin ?? '', pmax: p.pmax ?? '', qr: { ...p.qr }, addr: '', q: '' }); break; }
     case 'del': if (confirm('Delete this place?')) { S.pins = S.pins.filter(p => p.id !== d.id); save(); closeSheet(); render(); } break;
     case 'save': savePin(); break;
@@ -669,6 +735,13 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('input', e => {
+  const d0 = e.target.dataset;
+  if (d0.vf) { ui.vdraft[d0.vf] = e.target.value; return; }                // log-a-visit form
+  if (d0.spinvmin !== undefined || d0.spinvmax !== undefined) {           // times visited, on the Go Where? tab
+    const n = parseInt(e.target.value, 10), val = Number.isFinite(n) && n >= 0 ? n : null;
+    if (d0.spinvmin !== undefined) ui.spin.vmin = val; else ui.spin.vmax = val;
+    ui.spin.winner = null; updateSpin(); return;
+  }
   if (e.target.dataset.spinmax !== undefined) {                   // max price on the Spin tab
     ui.spin.maxPrice = num(e.target.value) || 0; ui.spin.winner = null; updateSpin(); return;
   }
@@ -685,6 +758,7 @@ document.addEventListener('change', e => {
   const t = e.target, f = t.dataset.f;
   if (t.dataset.cur !== undefined) { S.currency = t.value.trim(); save(); return; }
   if (t.dataset.maxp !== undefined) { ui.maxPrice = num(t.value) || 0; refreshChips(); openFilters(); return; }
+  if (t.dataset.spinlast !== undefined) { ui.spin.last = t.value; ui.spin.winner = null; updateSpin(); return; }
   if (!f) return;
   if (t.dataset.cat) {                       // inline category edit on the Manage tab
     const c = cat(t.dataset.cat);
