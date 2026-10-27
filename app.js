@@ -71,8 +71,8 @@ let S = load();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Could not save (storage full or blocked)'); } }
 try { navigator.storage?.persist?.(); } catch (e) { /* ignore */ }
 
-const ui = { tab: 'map', map: null, layer: null, me: null, view: null, pick: null, draft: null, vdraft: null, sort: 'recent', filter: [], minOverall: 0, minQ: {}, maxPrice: 0, results: [], busy: false,
-  spin: { km: 5, maxPrice: 0, last: '', vmin: null, vmax: null, off: [], rot: 0, items: [], winner: null, busy: false, tried: false } };
+const ui = { tab: 'map', map: null, layer: null, me: null, view: null, pick: null, draft: null, vdraft: null, sort: 'recent', filter: [], status: [], minOverall: 0, minQ: {}, maxPrice: 0, results: [], busy: false,
+  spin: { km: 5, maxPrice: 0, list: '', last: '', vmin: null, vmax: null, off: [], rot: 0, items: [], winner: null, busy: false, tried: false } };
 
 let toastT;
 function toast(msg, ms = 2600) {
@@ -113,6 +113,7 @@ const activeFilters = () => (ui.minOverall ? 1 : 0) + (ui.maxPrice ? 1 : 0) + Ob
 
 function visible() {
   return S.pins.filter(p => (!ui.filter.length || ui.filter.includes(cat(p.cat) ? p.cat : ''))
+    && (!ui.status.length || ui.status.some(k => p[k]))          // wishlist / favorites chips (either one matches)
     && pinRating(p) >= ui.minOverall
     && (!ui.maxPrice || (p.pmin != null && p.pmin <= ui.maxPrice))
     && Object.entries(ui.minQ).every(([k, min]) => !min || qualValue(p, k) >= min));
@@ -123,7 +124,9 @@ const stars = (r, ro, act = 'star', extra = '', num = false) => ro
   ? `<div class="stars ro" style="--c:${rc(r)}">${[1, 2, 3, 4, 5].map(i => `<span style="--p:${Math.round(Math.min(Math.max(r - (i - 1), 0), 1) * 100)}%">★</span>`).join('')}${num && r ? `<b>${r.toFixed(1)}</b>` : ''}</div>`
   : `<div class="stars" style="--c:${rc(r)}">${[1, 2, 3, 4, 5].map(i => `<button data-act="${act}" ${extra} data-v="${i}" class="${i <= r ? 'on' : ''}" aria-label="${i} stars">★</button>`).join('')}</div>`;
 
-const markerSvg = (color, emoji) => `<svg viewBox="0 0 24 24" style="color:${color}"><use href="#pin"/></svg><span>${esc(emoji || '')}</span>`;
+// small badges on the pin: a heart for favorites, a bookmark for the wishlist
+const markerSvg = (color, emoji, p = {}) => `<svg viewBox="0 0 24 24" style="color:${color}"><use href="#pin"/></svg><span>${esc(emoji || '')}</span>`
+  + (p.fav ? '<b class="mk fav">♥</b>' : '') + (p.wish ? '<b class="mk wish">🔖</b>' : '');
 
 /* ---------- rendering ---------- */
 function render(keep) {
@@ -144,10 +147,19 @@ const scroller = () => ui.tab === 'map' ? $('#view') : document.scrollingElement
 
 function chipsHtml() {
   const chip = (id, on, label) => `<button class="chip ${on ? 'on' : ''}" data-act="chip" data-id="${esc(id)}">${label}</button>`;
-  return chip('', !ui.filter.length, 'All')
+  const status = (k, label) => `<button class="chip ${ui.status.includes(k) ? 'on' : ''}" data-act="chip-status" data-id="${k}">${label}</button>`;
+  return chip('', !ui.filter.length && !ui.status.length, 'All')
+    + status('wish', '🔖 Wishlist') + status('fav', '♥ Favorites')
     + S.cats.map(c => chip(c.id, ui.filter.includes(c.id), `${esc(c.emoji)} ${esc(c.name)}`)).join('')
     + (S.pins.some(p => !cat(p.cat)) ? chip('__none', ui.filter.includes(''), 'Other') : '')
     + `<button class="chip ${activeFilters() ? 'on' : ''}" data-act="filters">★ Ratings${activeFilters() ? ` (${activeFilters()})` : ''}</button>`;
+}
+
+// redraw whatever sits under an open sheet after a place changed
+function refreshView() {
+  if (ui.tab === 'map') drawMarkers();
+  else if (ui.tab === 'list') renderList($('#view'), true);
+  else if (ui.tab === 'goWhere') updateSpin();
 }
 
 function refreshChips() {
@@ -215,7 +227,7 @@ function drawMarkers() {
   ui.layer.clearLayers();
   for (const p of visible()) {
     const c = cat(p.cat);
-    L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'gw-marker', html: markerSvg(rc(pinRating(p)), c?.emoji), iconSize: [36, 36], iconAnchor: [18, 34] }) })
+    L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'gw-marker', html: markerSvg(rc(pinRating(p)), c?.emoji, p), iconSize: [36, 36], iconAnchor: [18, 34] }) })
       .on('click', () => openDetail(p.id)).addTo(ui.layer);
   }
   if (ui.me) L.marker([ui.me.lat, ui.me.lng], { icon: L.divIcon({ className: 'gw-marker', html: '<div class="gw-me"></div>', iconSize: [16, 16] }), interactive: false }).addTo(ui.layer);
@@ -241,10 +253,10 @@ function renderList(v, keepScroll) {
       const c = cat(p.cat);
       return `<div class="card pin" data-act="detail" data-id="${p.id}">
         <svg class="ic" viewBox="0 0 24 24" style="color:${rc(pinRating(p))}"><use href="#pin"/></svg>
-        <div class="grow"><b>${esc(p.name)}</b>
+        <div class="grow"><b>${esc(p.name)}</b>${p.fav ? ' <span class="tagfav">♥</span>' : ''}${p.wish ? ' <span class="tagwish">🔖 Wishlist</span>' : ''}
           <div class="sm muted">${c ? esc(c.emoji + ' ' + c.name) : 'Uncategorised'}${p.pmin != null ? ' · ' + esc(priceText(p)) : ''}${ui.me ? ' · ' + fmtDist(dist(ui.me, p)) : ''}</div>
           ${visitsOf(p).length ? `<div class="sm visit-line">🔁 ${esc(visitSummary(p))}</div>` : ''}${stars(pinRating(p), true, '', '', true)}${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}</div></div>`;
-    }).join('') : `<div class="empty">${S.pins.length ? 'No places in this category.' : 'No places yet.<br>Tap + on the map to save your first one.'}</div>`);
+    }).join('') : `<div class="empty">${S.pins.length ? 'No places match these filters.' : 'No places yet.<br>Tap + on the map to save your first one.'}</div>`);
   if (keepScroll) scroller().scrollTop = y;
 }
 
@@ -310,8 +322,9 @@ function saveVisit() {
   if (!p) return closeSheet();
   if (!v.d || v.d > todayStr()) return toast(v.d ? 'A visit can\'t be in the future' : 'Pick a date');
   (p.visits ||= []).push({ id: uid(), d: v.d, spent: num(v.spent) });
-  save(); if (ui.tab === 'list') render(true);
-  toast('Visit logged'); openDetail(p.id);
+  const wasWish = p.wish; p.wish = false;                      // you've been now, so it leaves the wishlist
+  save(); refreshView();
+  toast(wasWish ? 'Visit logged — moved off your wishlist' : 'Visit logged'); openDetail(p.id);
 }
 
 function openDetail(id) {
@@ -320,6 +333,8 @@ function openDetail(id) {
   showSheet(`<h2>${esc(p.name)}<button class="x" data-act="close">×</button></h2>
     <div class="sm muted">${c ? esc(c.emoji + ' ' + c.name) : 'Uncategorised'}${p.pmin != null ? ' · ' + esc(priceText(p)) : ''}${ui.me ? ' · ' + fmtDist(dist(ui.me, p)) + ' away' : ''}</div>
     <div style="margin:8px 0">${stars(pinRating(p), true, '', '', true)}</div>
+    <div class="row togglerow"><button class="btn toggle ${p.wish ? 'on' : ''}" data-act="toggle" data-k="wish" data-id="${p.id}">${p.wish ? '🔖 On your wishlist' : '＋ Add to Wishlist'}</button>
+      <button class="btn toggle ${p.fav ? 'on fav' : ''}" data-act="toggle" data-k="fav" data-id="${p.id}">${p.fav ? '♥ Favorite' : '♡ Add to Favorites'}</button></div>
     ${visitsBlock(p)}
     ${(c?.quals || []).filter(q => p.qr?.[q.id]).map(q => `<div class="qrow"><span class="grow">${esc(q.name)}</span>${stars(p.qr[q.id], true)}</div>`).join('')}
     ${p.note ? `<div style="white-space:pre-wrap;margin:10px 0">${esc(p.note)}</div>` : ''}
@@ -329,7 +344,7 @@ function openDetail(id) {
 
 function newDraft(lat, lng) {
   const first = ui.filter.find(id => cat(id)) || S.cats[0]?.id || '';
-  return { id: null, name: '', cat: first, rating: 0, pmin: '', pmax: '', qr: {}, note: '', lat: lat ?? null, lng: lng ?? null, addr: '', q: '' };
+  return { id: null, name: '', cat: first, rating: 0, wish: false, fav: false, pmin: '', pmax: '', qr: {}, note: '', lat: lat ?? null, lng: lng ?? null, addr: '', q: '' };
 }
 
 function overallBlock(d) {
@@ -351,6 +366,8 @@ function openForm(d) {
     <label class="f">Name</label><input data-f="name" value="${esc(d.name)}" placeholder="e.g. Tonkotsu King">
     <label class="f">Category</label>
     <select data-f="cat">${S.cats.map(c => `<option value="${c.id}" ${c.id === d.cat ? 'selected' : ''}>${esc(c.emoji + ' ' + c.name)}</option>`).join('')}<option value="" ${!cat(d.cat) ? 'selected' : ''}>Uncategorised</option><option value="__new">＋ New category…</option></select>
+    <div class="row togglerow"><button class="btn toggle ${d.wish ? 'on' : ''}" data-act="dtoggle" data-k="wish">${d.wish ? '🔖 On wishlist' : '＋ Add to Wishlist'}</button>
+      <button class="btn toggle ${d.fav ? 'on fav' : ''}" data-act="dtoggle" data-k="fav">${d.fav ? '♥ Favorite' : '♡ Add to Favorites'}</button></div>
     <label class="f">Price${S.currency ? ' (' + esc(S.currency) + ')' : ''}</label>
     <div class="row"><input data-f="pmin" value="${esc(d.pmin)}" inputmode="decimal" placeholder="From, e.g. 15"><span class="muted">–</span><input data-f="pmax" value="${esc(d.pmax)}" inputmode="decimal" placeholder="To (optional)"></div>
     ${cat(d.cat) ? `<label class="f">Details · ${esc(cat(d.cat).name)}</label>`
@@ -417,8 +434,8 @@ function savePin() {
   if (pmin == null) pmax = null;
   else if (pmax != null && pmax < pmin) [pmin, pmax] = [pmax, pmin];
   const qr = Object.fromEntries(Object.entries(d.qr).filter(([, v]) => v));
-  if (d.id) Object.assign(pinOf(d.id), { name, cat: d.cat, rating: d.rating, pmin, pmax, qr, note: d.note.trim(), lat: d.lat, lng: d.lng });
-  else S.pins.push({ id: uid(), name, cat: d.cat, rating: d.rating, pmin, pmax, qr, visits: [], note: d.note.trim(), lat: d.lat, lng: d.lng, created: Date.now() });
+  if (d.id) Object.assign(pinOf(d.id), { name, cat: d.cat, rating: d.rating, wish: !!d.wish, fav: !!d.fav, pmin, pmax, qr, note: d.note.trim(), lat: d.lat, lng: d.lng });
+  else S.pins.push({ id: uid(), name, cat: d.cat, rating: d.rating, wish: !!d.wish, fav: !!d.fav, pmin, pmax, qr, visits: [], note: d.note.trim(), lat: d.lat, lng: d.lng, created: Date.now() });
   save(); closeSheet();
   if (ui.tab === 'map') ui.view = { c: { lat: d.lat, lng: d.lng }, z: Math.max(ui.map?.getZoom() || 0, 15) };
   render(); toast('Saved');
@@ -482,7 +499,10 @@ const ABOUT = [
     <p>On the <b>List</b> tab, <b>Price ↑</b> and <b>Price ↓</b> sort by price. A range counts as its middle, and places with no price go last.</p>`],
   ['Visits and spending', `<p>Open a place and tap <b>＋ Log a visit</b> each time you go: pick the date and, if you like, what you spent. GoWhere keeps a counter of visits and the <b>total spent</b> for each place, shows when you were last there, and lets you delete a wrong entry. The List shows each place's visits and spend, and <b>Manage</b> shows the totals across all places.</p>
     <p>On the <b>Go Where?</b> tab, <b>✓ I went here</b> on the result logs the visit straight away.</p>`],
-  ['Filter and sort', `<p>The chips at the top of the Map and List select categories. Pick several to combine them; <b>All</b> clears them.</p>
+  ['Wishlist and favorites', `<p>Open a place and tap <b>＋ Add to Wishlist</b> for somewhere you plan to go, or <b>♡ Add to Favorites</b> for somewhere you love. You can also switch them on while adding or editing a place. Favorites get a ♥ on the map pin and wishlist places a 🔖.</p>
+    <p>The <b>🔖 Wishlist</b> and <b>♥ Favorites</b> chips at the top of the Map and List show only those places (pick both to see either). On <b>Go Where?</b>, the <b>Show</b> menu lets the wheel pick from your wishlist, your favorites, or both.</p>
+    <p>When you log a visit to a wishlist place, it leaves the wishlist automatically.</p>`],
+  ['Filter and sort', `<p>The chips at the top of the Map and List select categories (and the wishlist and favorites). Pick several to combine them; <b>All</b> clears them.</p>
     <p>The <b>★ Ratings</b> chip sets minimums: overall rating, any detail of the chosen categories (e.g. Atmosphere at least 4) and a <b>Max price</b>.</p>
     <p>The List can be sorted by <b>Recent</b>, <b>Top</b> rated, <b>Nearby</b>, or <b>Price</b>.</p>`],
   ['Can\'t decide? Go Where?', `<p>Open the <b>Go Where?</b> tab, set a range in km, optionally a <b>max price</b> (places priced above it, or with no price, are left out), and choose at least one category. Narrow it by <b>last visited</b> (for example places you haven't been to in 90 days, or never) and by <b>times visited</b> (a min and max). Each chip shows how many places match. Tap <b>Spin the wheel</b> and the wheel picks one at random, with a card to get directions.</p>
@@ -519,8 +539,9 @@ function spinVisitOk(p) {
   if (mode === 'out') return last == null || daysSince(last) > +days;
   return true;
 }
+const spinListOk = p => { const l = ui.spin.list; return !l || (l === 'wish' ? p.wish : l === 'fav' ? p.fav : p.wish || p.fav); };
 const spinPriceOk = p => !ui.spin.maxPrice || (p.pmin != null && p.pmin <= ui.spin.maxPrice);
-const inRange = () => ui.me ? S.pins.filter(p => dist(ui.me, p) <= ui.spin.km && spinPriceOk(p) && spinVisitOk(p)) : [];
+const inRange = () => ui.me ? S.pins.filter(p => dist(ui.me, p) <= ui.spin.km && spinPriceOk(p) && spinVisitOk(p) && spinListOk(p)) : [];
 const spinCandidates = () => { const on = spinCats(); return inRange().filter(p => on.includes(catKey(p))).sort((a, b) => dist(ui.me, a) - dist(ui.me, b)); };
 
 // unbiased random integer in [0, n)
@@ -565,6 +586,7 @@ function renderSpin(v) {
     <div class="card">
       <div class="row"><span class="grow">Within <b id="kmval">${s.km}</b> km</span><button class="btn sm" data-act="spin-loc">◎ ${ui.me ? 'Update' : 'Use my'} location</button></div>
       <input type="range" min="1" max="50" step="1" value="${s.km}" data-spinkm aria-label="Range in km">
+      <div class="row"><span class="grow">Show</span><select data-spinlist style="width:auto;max-width:64%" aria-label="Which places">${[['', 'All places'], ['wish', 'Wishlist only'], ['fav', 'Favorites only'], ['either', 'Wishlist + Favorites']].map(([v, l]) => `<option value="${v}" ${v === s.list ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="row"><span class="grow">Max price${S.currency ? ' (' + esc(S.currency) + ')' : ''}</span><input data-spinmax inputmode="decimal" style="width:110px" value="${s.maxPrice || ''}" placeholder="No limit" aria-label="Max price"></div>
       <div class="row"><span class="grow">Last visited</span><select data-spinlast style="width:auto;max-width:64%" aria-label="Last visited">${LAST_OPTS.map(([v, l]) => `<option value="${v}" ${v === s.last ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="row"><span class="grow">Times visited</span><input data-spinvmin inputmode="numeric" style="width:72px" value="${s.vmin ?? ''}" placeholder="min" aria-label="Minimum visits"><span class="muted">–</span><input data-spinvmax inputmode="numeric" style="width:72px" value="${s.vmax ?? ''}" placeholder="max" aria-label="Maximum visits"></div>
@@ -589,7 +611,7 @@ function updateSpin() {
       + (cands.length > wheelSize(cands) ? ` · the wheel shows ${wheelSize(cands)} of them, spread across your categories, including the winner` : '');
   if (!s.busy && !s.winner) s.items = spread(cands, wheelSize(cands));          // preview until a spin has been made
   $('#spinbtn').disabled = s.busy || !cands.length;
-  for (const el of document.querySelectorAll('[data-spinkm], [data-spinmax], [data-spinlast], [data-spinvmin], [data-spinvmax]')) el.disabled = s.busy;
+  for (const el of document.querySelectorAll('[data-spinkm], [data-spinmax], [data-spinlist], [data-spinlast], [data-spinvmin], [data-spinvmax]')) el.disabled = s.busy;
   const w = s.winner, c = w && cat(w.cat);
   $('#spinres').innerHTML = !w ? '' : `<div class="card result">
     <div class="sm muted">Go to…</div><h2>${esc(c?.emoji || '📍')} ${esc(w.name)}</h2>
@@ -707,9 +729,16 @@ document.addEventListener('click', e => {
     case 'pick-cancel': { const pd = ui.pick.d; ui.pick = null; render(); openForm(pd); break; }
     case 'locate': locate(() => { ui.map?.setView([ui.me.lat, ui.me.lng], 16); drawMarkers(); }); break;
     case 'chip':
-      if (!id) ui.filter = [];
+      if (!id) { ui.filter = []; ui.status = []; }
       else { const k = id === '__none' ? '' : id; ui.filter = ui.filter.includes(k) ? ui.filter.filter(x => x !== k) : [...ui.filter, k]; }
       refreshChips(); break;
+    case 'chip-status': ui.status = ui.status.includes(id) ? ui.status.filter(x => x !== id) : [...ui.status, id]; refreshChips(); break;
+    case 'toggle': {                                             // wishlist / favorite switch in the detail sheet
+      const p = pinOf(id); p[el.dataset.k] = !p[el.dataset.k]; save();
+      toast(p[el.dataset.k] ? (el.dataset.k === 'wish' ? 'Added to your wishlist' : 'Added to favorites') : (el.dataset.k === 'wish' ? 'Removed from wishlist' : 'Removed from favorites'));
+      openDetail(id); refreshView(); break;
+    }
+    case 'dtoggle': d[el.dataset.k] = !d[el.dataset.k]; openForm(d); break;     // same switches in the add / edit form
     case 'sort': if (id === 'near' && !ui.me) locate(() => { ui.sort = id; render(); }); else { ui.sort = id; render(); } break;
     case 'cat-add': {
       const name = $('#ncName').value.trim(); if (!name) return toast('Give the category a name');
@@ -758,6 +787,7 @@ document.addEventListener('change', e => {
   const t = e.target, f = t.dataset.f;
   if (t.dataset.cur !== undefined) { S.currency = t.value.trim(); save(); return; }
   if (t.dataset.maxp !== undefined) { ui.maxPrice = num(t.value) || 0; refreshChips(); openFilters(); return; }
+  if (t.dataset.spinlist !== undefined) { ui.spin.list = t.value; ui.spin.winner = null; updateSpin(); return; }
   if (t.dataset.spinlast !== undefined) { ui.spin.last = t.value; ui.spin.winner = null; updateSpin(); return; }
   if (!f) return;
   if (t.dataset.cat) {                       // inline category edit on the Manage tab
